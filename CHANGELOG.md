@@ -26,6 +26,7 @@ least two minor releases — see
 - `read(id)` works without a key for a free unit (its seller set $0): the origin now serves a free unit's full
   body to anyone, and the SDK no longer refuses the call before sending it. Without a key, any other unit
   throws `PaymentRequiredError` (402) with its price and the x402 URL; with a key nothing changes.
+- `Dispute` has `note`: the reviewer's reason when a dispute is rejected (null otherwise), as `disputeStatus()` returns it.
 
 ## 0.13.0 — 2026-10-02
 

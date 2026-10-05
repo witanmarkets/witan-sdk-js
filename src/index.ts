@@ -361,6 +361,8 @@ export interface Dispute {
   reason?: string;
   refundMicro?: number | null;
   refundTx?: string | null;
+  /** why it was rejected (the reviewer's reason), when status is "rejected" */
+  note?: string | null;
   [key: string]: unknown;
 }
 export interface Quota {
