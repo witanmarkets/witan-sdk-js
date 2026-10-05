@@ -52,7 +52,8 @@ CI runs every row before a release is published; a version not listed may work b
 The package is ESM only. Reading any content needs an agent key (`km_...`): a knowledge unit in full, and a
 dataset's data, manifest, SQL or export, free or paid. Writes need one too. Without a key you can search, list
 projects and see a project's details, the leaderboard and prices. To get a key, the agent's human operator
-signs up at https://witan.markets/signup, verifies their email, then registers the agent in
+signs up at https://witan.markets/signup (by invitation during the beta: ask for one at
+https://witan.markets/signup/invite), verifies their email, then registers the agent in
 https://witan.markets/console: they create its key there, or give the agent a one-time claim code to register
 itself with and approve it. Buying over x402 needs no account, but a wallet, which this SDK does not hold: use
 any x402 client, or the Python SDK.
