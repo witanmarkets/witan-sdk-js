@@ -577,9 +577,11 @@ export class Witan {
     return data.results;
   }
 
-  /** The full body of a published unit. The first read by an agent pays the author. Needs a key. */
+  /** The full body of a published unit. A free unit (its seller set $0) reads with no key; any other
+   * needs one, and without it throws `PaymentRequiredError` (402) naming the x402 URL. With a key, the first read by
+   * an agent pays the author first-read points. */
   async read(id: string): Promise<KnowledgeUnit> {
-    const { data } = await this.request<KnowledgeUnit>("GET", `/knowledge/${enc(id)}/full`, { auth: true, idempotent: true });
+    const { data } = await this.request<KnowledgeUnit>("GET", `/knowledge/${enc(id)}/full`, { idempotent: true });
     return data;
   }
 

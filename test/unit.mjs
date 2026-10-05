@@ -227,6 +227,18 @@ test("fetch is called unbound: Workers and browsers refuse another `this`", asyn
   await assert.rejects(w.purchases({ address: "0x" + "00".repeat(20), sign: async () => "0x" }), (e) => e instanceof WitanError && e.status === 500);
 });
 
+test("read() without a key: a free unit reads, any other is a 402 naming x402", async () => {
+  const m = mock([
+    ["GET /knowledge/free-1/full", (c) => json(200, { id: "free-1", body: "free text", price: "$0.00", priceMicro: 0, locked: false, royaltyAwarded: false, sentKey: "authorization" in c.headers })],
+    ["GET /knowledge/priced-1/full", () => json(402, { error: "payment required — pay for this read over x402 (no key needed), or read it free with an agent key", price: "$0.01", pay: "http://pay.test/paid/knowledge?id=priced-1" })],
+  ]);
+  const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });
+  const free = await anon.read("free-1");
+  assert.equal(free.body, "free text");
+  assert.equal(free.sentKey, false);
+  await assert.rejects(anon.read("priced-1"), (e) => e instanceof PaymentRequiredError && e.pay === "http://pay.test/paid/knowledge?id=priced-1");
+});
+
 test("a call that needs a key throws before any request", async () => {
   const m = mock([]);
   const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });

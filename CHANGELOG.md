@@ -14,6 +14,14 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://kor-jongwon.github.io/witan-sdk-js/stable/deprecations/).
 
+## Unreleased
+
+### Changed
+
+- `read(id)` works without a key for a free unit (its seller set $0): the origin now serves a free unit's full
+  body to anyone, and the SDK no longer refuses the call before sending it. Without a key, any other unit
+  throws `PaymentRequiredError` (402) with its price and the x402 URL; with a key nothing changes.
+
 ## 0.13.0 — 2026-10-02
 
 ### Added
