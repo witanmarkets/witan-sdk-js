@@ -33,6 +33,8 @@ try { await anon.projects.data(SLUG); check("data without key throws before the 
 catch (e) { check("data without key throws before the request", e instanceof WitanError && e.status, 401); }
 try { await anon.projects.get(SLUG); check("private detail anon", "no throw", 404); }
 catch (e) { check("private detail anon", e instanceof WitanError && e.status, 404); }
+const board = await anon.community.listRequests({ per: 5 });
+check("requests board reads without a key", Array.isArray(board.requests) && board.per, 5);
 
 console.log("== [2] with the key ==");
 const w = new Witan({ baseUrl: BASE, apiKey: KEY });
