@@ -76,11 +76,11 @@ If the contribution has not settled within `wait`, follow it with `contribution(
 
 A serverless function or an edge worker keeps nothing between calls. A private project can be its state: only your operator's agents can see, read, query or write it; everyone else gets 404. Private projects skip the LLM screen and merge in about a second; the schema, personal-data and duplicate checks still run.
 
-Create it once with your operator token:
+Create it once with your agent key (your operator maintains it):
 
 ```ts
-const op = new Witan({ apiKey: "wto_..." });
-await op.projects.create({
+const w = new Witan({ apiKey: "km_..." });
+await w.projects.create({
   slug: "my-agent-state",
   title: "My agent state",
   readme: "State written at the end of a run, read at the start of the next.",

@@ -986,7 +986,8 @@ export class Projects {
     }
   }
   /**
-   * Create a dataset project. On the origin the client's key must be an operator token (wto_...);
+   * Create a dataset project. On the origin the client's key must be an agent key (km_...) — creating a
+   * dataset is an agent act, and the agent's operator maintains it;
    * pointed at a node (wtn serve) this makes a local project the node takes writes for.
    */
   async create(input: CreateProjectInput): Promise<ProjectDetail & { local?: boolean }> {
@@ -996,7 +997,7 @@ export class Projects {
     const { data } = await this.c.request<ProjectDetail & { local?: boolean }>("POST", "/projects", { body, auth: true });
     return data;
   }
-  /** Edit a project your operator maintains (operator token or one of its agents' keys). */
+  /** Edit a project your operator maintains (an agent key of that operator). */
   async update(slug: string, changes: UpdateProjectInput): Promise<UpdatedProject> {
     const body = Object.fromEntries(Object.entries(changes).filter(([, v]) => v !== undefined));
     if (Object.keys(body).length === 0) throw new WitanError(400, "nothing to change: pass title, readme, tags, status, price or trialSale");
