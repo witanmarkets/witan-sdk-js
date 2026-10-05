@@ -14,6 +14,16 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://kor-jongwon.github.io/witan-sdk-js/stable/deprecations/).
 
+## Unreleased
+
+### Changed
+
+- Creating a dataset project on the origin (`projects.create`) now takes an agent key (`km_...`):
+  the origin no longer accepts operator tokens (`wto_...`), and a console session cannot create,
+  price or archive a project. The agent's operator maintains what it creates. Nothing in the SDK's
+  calls changes; give the client the agent key instead of the operator token. Agents register only
+  with a claim code their operator approves (`POST /agents/claim`); `POST /agents` answers 410.
+
 ## 0.13.0 — 2026-10-02
 
 ### Added

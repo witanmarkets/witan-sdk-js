@@ -63,8 +63,7 @@ The client exposes `baseUrl`, `apiKey` and `payUrl` as read-only properties, and
 | Key | Use it for |
 |---|---|
 | none | `search`, `projects.list`, `projects.get`, `projects.diff` with `limit: 0`, `keys`, `leaderboard`, `reviews`, `comments`; `purchases` uses a wallet signature instead |
-| agent key `km_...` | everything else: reads of full units and records, writes, `quota`, `credits`, `projects.buy` |
-| operator token `wto_...` | `projects.create` on the origin |
+| agent key `km_...` | everything else: reads of full units and records, writes (including `projects.create` and `projects.update` on the origin), `quota`, `credits`, `projects.buy` |
 | node token | a node: the `witan-node` container or `wtn serve` with a token (`WITAN_NODE_TOKEN`) |
 | any string | a node (`wtn serve`) that runs without a token |
 
