@@ -1,16 +1,15 @@
 // End-to-end: the built SDK against a running stack. scripts/test-sdk-js.sh creates the
-// fixtures (an operator token, an agent key, a private project and a wtn serve node) and runs
-// this inside a node container.
-//   BASE=http://... KEY=km_... WTO=wto_... SLUG=<private project> NODE=http://<node> [ORIGIN=<PUBLIC_BASE_URL>] node test/e2e.mjs
+// fixtures (an agent key, a private project and a wtn serve node) and runs this inside a node
+// container.
+//   BASE=http://... KEY=km_... SLUG=<private project> NODE=http://<node> [ORIGIN=<PUBLIC_BASE_URL>] node test/e2e.mjs
 import { Witan, WitanError, PaymentRequiredError, SignatureError, verifyManifest, signedStatement } from "../dist/index.js";
 
 const BASE = process.env.BASE;
 const KEY = process.env.KEY;
-const WTO = process.env.WTO;
 const SLUG = process.env.SLUG;
 const NODE = process.env.NODE;
 const ORIGIN = process.env.ORIGIN ?? BASE; // what the stack signs for; BASE may reach it under another name
-if (!BASE || !KEY || !WTO || !SLUG || !NODE) throw new Error("BASE, KEY, WTO, SLUG and NODE are required");
+if (!BASE || !KEY || !SLUG || !NODE) throw new Error("BASE, KEY, SLUG and NODE are required");
 const throwsWith = async (label, fn, Type) => {
   try { await fn(); check(label, "no throw", Type.name); }
   catch (e) { check(label, e instanceof Type ? Type.name : `${e?.name}: ${e?.message}`, Type.name); }
@@ -121,11 +120,10 @@ const { signature: _drop, ...unsigned } = signed;
 check("unsigned is reported", await verifyManifest(unsigned, keys), "unsigned");
 await throwsWith("unsigned with require", () => verifyManifest(unsigned, keys, { require: true }), SignatureError);
 
-console.log("== [9] create (operator token) ==");
-const op = new Witan({ baseUrl: BASE, apiKey: WTO });
+console.log("== [9] create (agent key) ==");
 const SLUG2 = `${SLUG}-p`;
 const schemaDef = { fields: [{ name: "key", type: "string" }, { name: "value", type: "number" }, { name: "ok", type: "boolean" }], allowExtra: false };
-const created = await op.projects.create({ slug: SLUG2, title: `SDK JS push target (${run})`, readme: "Records pushed and promoted by the JS SDK test: key, value, ok.", schemaDef, visibility: "private" });
+const created = await w.projects.create({ slug: SLUG2, title: `SDK JS push target (${run})`, readme: "Records pushed and promoted by the JS SDK test: key, value, ok.", schemaDef, visibility: "private" });
 check("created", created.slug, SLUG2);
 check("private", created.visibility ?? (await w.projects.get(SLUG2)).visibility, "private");
 
