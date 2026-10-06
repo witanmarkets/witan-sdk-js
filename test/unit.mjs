@@ -720,3 +720,61 @@ test("report() files a report: with the key when there is one, an address only w
   assert.deepEqual(JSON.parse(anon.calls[0].body).email, "me@example.org");
   assert.equal(new Headers(anon.calls[0].headers).get("authorization"), null);
 });
+
+// ---- the Requests board and revising --------------------------------------------------------
+const REQ = "3c9f6a2e-8d41-4b7a-a0c5-6e2f1d9b8a70";
+test("community: requests read with no key, with the filters given", async () => {
+  const m = mock([
+    ["GET /community/requests", (c) => json(200, { total: 1, page: 1, per: 5, pages: 1, counts: { all: 1, status: {}, kind: {}, category: {} },
+      requests: [{ id: REQ, title: "p95 at 16KB", status: "open" }], sentKey: "authorization" in c.headers })],
+    [`GET /community/requests/${REQ}`, () => json(200, { id: REQ, status: "answered", answers: [{ id: 40, chosen: false }], fulfilledBy: null })],
+  ]);
+  const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });
+  const list = await anon.community.listRequests({ status: "open", kind: "knowledge", q: "p95 16KB", per: 5, category: undefined });
+  assert.equal(list.requests[0].id, REQ);
+  assert.equal(list.sentKey, false);
+  assert.deepEqual(Object.fromEntries(m.calls[0].url.searchParams), { status: "open", kind: "knowledge", q: "p95 16KB", per: "5" });
+  assert.equal((await anon.community.getRequest(REQ)).answers[0].id, 40);
+});
+
+test("community: posting, answering, choosing and closing take the key", async () => {
+  const anon = client([], { apiKey: undefined });
+  for (const call of [
+    () => anon.w.community.postRequest({ title: "p95 at 16KB", body: "measured p95 latency at 16KB payloads" }),
+    () => anon.w.community.answerRequest(REQ, { note: "see my unit" }),
+    () => anon.w.community.chooseAnswer(REQ, 40),
+    () => anon.w.community.closeRequest(REQ),
+  ]) await assert.rejects(call(), (e) => e instanceof WitanError && e.status === 401);
+  assert.equal(anon.calls.length, 0);
+
+  const { w, calls } = client([
+    ["POST /community/requests", () => json(201, { id: REQ, status: "open", createdAt: "2026-10-06T00:00:00Z", url: `https://witan.markets/community/t/${REQ}` })],
+    [`POST /community/requests/${REQ}/answers`, () => json(201, { id: 40, createdAt: "2026-10-06T00:00:00Z", request: REQ })],
+    [`POST /community/requests/${REQ}/choose`, (c) => json(200, { status: "fulfilled", answerId: JSON.parse(c.body).answerId, boughtByRequester: false })],
+    [`POST /community/requests/${REQ}/close`, () => json(200, { status: "closed" })],
+  ]);
+  const posted = await w.community.postRequest({ title: "p95 at 16KB", body: "measured p95 latency at 16KB payloads", kind: "dataset",
+    budget: "5", deadline: undefined, fields: [{ name: "p95_ms", type: "number" }] });
+  assert.equal(posted.id, REQ);
+  assert.equal((await w.community.answerRequest(REQ, { dataset: "agent-api-observatory", version: 3, note: "v3 has it" })).id, 40);
+  assert.equal((await w.community.chooseAnswer(REQ, 40)).answerId, 40);
+  assert.equal((await w.community.closeRequest(REQ)).status, "closed");
+  assert.deepEqual(calls.map((c) => JSON.parse(c.body)), [
+    { title: "p95 at 16KB", body: "measured p95 latency at 16KB payloads", kind: "dataset", budget: "5", fields: [{ name: "p95_ms", type: "number" }] },
+    { dataset: "agent-api-observatory", version: 3, note: "v3 has it" },
+    { answerId: 40 },
+    {},
+  ]);
+  assert.ok(calls.every((c) => new Headers(c.headers).get("authorization") === "Bearer km_test"));
+});
+
+test("revise posts only what is given and checks the license before sending", async () => {
+  const U = "5e5fc8dd-af67-4f34-839b-b366ef05d43d";
+  const { w, calls } = client([[`POST /knowledge/${U}/revise`, () => json(201, { id: "u-2", version: 2, status: "submitted" })]]);
+  await assert.rejects(w.revise(U, { body: "b".repeat(60), license: "GPL" }), (e) => e instanceof WitanError && /license must be one of/.test(e.message));
+  assert.equal(calls.length, 0);
+  const r = await w.revise(U, { body: "b".repeat(60), title: "Redis 7.4, again", category: undefined, license: "cc-by-4.0" });
+  assert.equal(r.version, 2);
+  assert.deepEqual(JSON.parse(calls[0].body), { body: "b".repeat(60), title: "Redis 7.4, again", license: "CC-BY-4.0" });
+  assert.equal(new Headers(calls[0].headers).get("authorization"), "Bearer km_test");
+});
