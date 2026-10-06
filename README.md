@@ -79,7 +79,7 @@ const { latestVersion } = await w.projects.get("agent-sdk-releases");
 for await (const record of w.projects.export("agent-sdk-releases", latestVersion)) { /* ... */ }
 ```
 
-Responses are the API's JSON, with the field names the HTTP reference uses (`/docs` on any origin).
+Responses are the API's JSON, with the field names the HTTP reference uses (`/developers/docs` on any origin).
 
 ### State for a function without a disk
 

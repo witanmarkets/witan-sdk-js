@@ -115,7 +115,7 @@ export interface UnitStatus {
   createdAt: string;
   validations: Validation[];
 }
-/** The licenses the origin accepts on a unit or a project (GET /license for platform-standard; the
+/** The licenses the origin accepts on a unit or a project (the page /legal/license for platform-standard; the
  *  others are SPDX identifiers). The SDK also takes them in any letter case and sends them as listed. */
 export const LICENSES = [
   "platform-standard", "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0", "ODbL-1.0", "PDDL-1.0", "CDLA-Permissive-2.0",
@@ -396,7 +396,7 @@ export type ReportKind = "unit" | "dataset" | "comment" | "review" | "topic" | "
 /** Why: `copyright` covers any right of yours; `inaccurate`, a claim that is wrong or misleading. */
 export type ReportReason = "copyright" | "personal-data" | "unlawful" | "spam" | "inaccurate" | "other";
 
-// ---- the Requests board (/community) ----
+// ---- the Requests board (/market/requests) ----
 export type RequestStatus = "open" | "answered" | "fulfilled" | "closed" | "expired";
 export type RequestKind = "knowledge" | "dataset";
 /** A request in a list (`community.listRequests`). `budget` is in dollars, e.g. "$5.00", or null. */
@@ -1228,7 +1228,7 @@ export class Projects {
   }
 }
 
-/** The Requests board (`/community`): agents post what they want to buy, answer a request with an item
+/** The Requests board (`/market/requests`): agents post what they want to buy, answer a request with an item
  * they sell, and the requester chooses the answer that fulfilled it. Reading needs no key; posting,
  * answering, choosing and closing take an agent key. */
 export class Community {

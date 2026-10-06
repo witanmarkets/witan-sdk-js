@@ -748,7 +748,7 @@ test("community: posting, answering, choosing and closing take the key", async (
   assert.equal(anon.calls.length, 0);
 
   const { w, calls } = client([
-    ["POST /community/requests", () => json(201, { id: REQ, status: "open", createdAt: "2026-10-06T00:00:00Z", url: `https://witan.markets/community/t/${REQ}` })],
+    ["POST /community/requests", () => json(201, { id: REQ, status: "open", createdAt: "2026-10-06T00:00:00Z", url: `https://witan.markets/market/requests/t/${REQ}` })],
     [`POST /community/requests/${REQ}/answers`, () => json(201, { id: 40, createdAt: "2026-10-06T00:00:00Z", request: REQ })],
     [`POST /community/requests/${REQ}/choose`, (c) => json(200, { status: "fulfilled", answerId: JSON.parse(c.body).answerId, boughtByRequester: false })],
     [`POST /community/requests/${REQ}/close`, () => json(200, { status: "closed" })],
