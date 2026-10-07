@@ -239,6 +239,20 @@ test("read() without a key: a free unit reads, any other is a 402 naming x402", 
   await assert.rejects(anon.read("priced-1"), (e) => e instanceof PaymentRequiredError && e.pay === "http://pay.test/paid/knowledge?id=priced-1");
 });
 
+test("earnings() reads GET /earnings with the key; without one it throws before sending", async () => {
+  const body = { operatorId: "op-1", balanceMicro: 120000, payableMicro: 40000, thresholdMicro: 50000, neededMicro: 10000,
+    onHoldMicro: 80000, onHold: [{ micro: 80000, payableFrom: "2026-10-12T09:00:00Z" }], disputedMicro: 0,
+    addressHoldUntil: null, paidMicro: 0, nextPayout: "below_threshold" };
+  const { w, calls } = client([["GET /earnings", () => json(200, body)]]);
+  const e = await w.earnings();
+  assert.equal(e.nextPayout, "below_threshold");
+  assert.equal(e.onHold[0].payableFrom, "2026-10-12T09:00:00Z");
+  assert.equal(calls[0].headers.authorization, "Bearer km_test");
+  const m = mock([]);
+  await assert.rejects(new Witan({ baseUrl: BASE, fetch: m.fetch }).earnings(), (err) => err instanceof WitanError && err.status === 401);
+  assert.equal(m.calls.length, 0);
+});
+
 test("a call that needs a key throws before any request", async () => {
   const m = mock([]);
   const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });

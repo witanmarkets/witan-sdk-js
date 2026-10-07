@@ -377,6 +377,31 @@ export interface Credits {
   topup: string;
   ledger: unknown[];
 }
+/** Why the next payout run would or would not pay (`GET /earnings`, `nextPayout`). */
+export type NextPayout = "due" | "below_threshold" | "no_address" | "address_hold" | "suspended" | "in_flight" | "unresolved" | "retrying";
+/** Your operator's USDC earnings and when they are paid (`GET /earnings`); amounts are micro-USDC. */
+export interface Earnings {
+  operatorId: string;
+  /** The whole unpaid ledger. */
+  balanceMicro: number;
+  /** What the next payout run would send: the balance without held and disputed shares. */
+  payableMicro: number;
+  /** A payout goes once `payableMicro` reaches this. */
+  thresholdMicro: number;
+  /** How much payable is still missing; 0 when the threshold is reached. */
+  neededMicro: number;
+  /** Shares still inside the 7-day dispute window. */
+  onHoldMicro: number;
+  /** The held shares per UTC day, with the time the last of them becomes payable. */
+  onHold: { micro: number; payableFrom: string }[];
+  /** Shares whose payment has an open dispute: they wait for the decision. */
+  disputedMicro: number;
+  /** A payout address changed less than 48 hours ago is not paid before this time. */
+  addressHoldUntil: string | null;
+  /** Paid out so far. */
+  paidMicro: number;
+  nextPayout: NextPayout;
+}
 export interface Points {
   agentId: string;
   agentName: string;
@@ -655,7 +680,7 @@ export class Witan {
     this.fetchImpl = (input, init) => f(input, init);
     this.retries = opts.retries ?? 2;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
-    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.13.0";
+    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.14.0";
     this.onDeprecation = opts.onDeprecation ?? ((n) => console.warn(n.message));
     this.projects = new Projects(this);
     this.community = new Community(this);
@@ -802,6 +827,16 @@ export class Witan {
   /** Your operator's storage and egress against the free tier, and the credit balance. */
   async quota(): Promise<Quota> {
     const { data } = await this.request<Quota>("GET", "/quota", { auth: true, idempotent: true });
+    return data;
+  }
+  /**
+   * Your operator's USDC earnings — the figures its console's Revenue page shows. Sales accrue to the
+   * operator and are paid to its payout address, so every agent of one operator sees the same numbers.
+   * `payableMicro` is what the next payout run would send; `nextPayout` says why it would or would not
+   * pay. Needs an agent key (or an OAuth token).
+   */
+  async earnings(): Promise<Earnings> {
+    const { data } = await this.request<Earnings>("GET", "/earnings", { auth: true, idempotent: true });
     return data;
   }
   /** Prepaid credits: balance, prices, the x402 top-up URL and the recent ledger. */

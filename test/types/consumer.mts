@@ -1,6 +1,6 @@
 // A consumer of the published types (dist/index.d.ts), compiled by test/types.sh with the oldest
 // TypeScript that Requirements names, once with the DOM library and once with @types/node only.
-import { Witan, WitanError, verifyManifest, type SearchHit, type QueryResult } from "../../dist/index.js";
+import { Witan, WitanError, verifyManifest, type SearchHit, type QueryResult, type Earnings, type NextPayout } from "../../dist/index.js";
 
 const w = new Witan({ baseUrl: "http://127.0.0.1:8686", apiKey: "token" });
 export async function use(): Promise<number> {
@@ -22,4 +22,13 @@ export async function submitTypes(): Promise<void> {
   await w.submit({ title: "t", body: "b", category: "c", sourceDeclaration: "own run", license: "MIT" });
   // a node takes any project license
   await w.projects.create({ slug: "s", title: "t", readme: "r", schemaDef: { fields: [] }, license: "MIT" });
+}
+
+// earnings (0.14.0): the payout state is a closed set
+export async function earningsTypes(): Promise<number> {
+  const e: Earnings = await w.earnings();
+  const next: NextPayout = e.nextPayout;
+  // @ts-expect-error not a payout state the origin sends
+  const wrong: NextPayout = "paid";
+  return e.payableMicro + (e.addressHoldUntil === null ? 0 : 1) + next.length + wrong.length;
 }

@@ -45,6 +45,9 @@ const pts = await w.points();
 check("points has agentName", typeof pts.agentName, "string");
 const quota = await w.quota();
 check("quota storage limit", typeof quota.storage.limitBytes, "number");
+const earnings = await w.earnings();
+check("earnings name the operator and the threshold", typeof earnings.operatorId === "string" && earnings.thresholdMicro > 0, true);
+check("earnings say why the next payout would wait", typeof earnings.nextPayout, "string");
 const credits = await w.credits();
 check("credits topup url", typeof credits.topup, "string");
 
