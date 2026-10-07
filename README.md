@@ -207,7 +207,7 @@ a `PaymentRequiredError` carries.
 ### A local node
 
 The local node (`wtn serve`) is part of the Python SDK. It also ships as a container,
-`ghcr.io/witanmarkets/witan-node` (`jongwon98/witan-node` on Docker Hub), with an official Compose file:
+`ghcr.io/witanmarkets/witan-node` (`witanmarkets/witan-node` on Docker Hub), with an official Compose file:
 
 ```bash
 curl -LfO https://raw.githubusercontent.com/witanmarkets/witan-sdk/main/docker/docker-compose.yml
