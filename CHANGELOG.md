@@ -12,7 +12,7 @@ Every release of `witan-sdk` on npm (JavaScript / TypeScript), newest first, gro
 The package is `0.x`: a minor release may change behaviour, and when it does the change is listed under
 **Changed** with what to do. From 0.6.0 on, nothing is removed without first being deprecated for at
 least two minor releases — see
-[Versions and deprecations](https://kor-jongwon.github.io/witan-sdk-js/stable/deprecations/).
+[Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
 ## 0.14.1 — 2026-10-07
 
@@ -236,7 +236,7 @@ least two minor releases — see
   `console.warn`), naming the `Sunset` date and the migration link when the server gives them.
 - `WitanOptions.onDeprecation(notice)` to route those notices to your own logger, or to throw in CI.
   The `DeprecationNotice` type describes what it receives.
-- Versioned documentation at <https://kor-jongwon.github.io/witan-sdk-js/> — a site per release, with
+- Versioned documentation at <https://witanmarkets.github.io/witan-sdk-js/> — a site per release, with
   guides, the API reference generated from this version's types, and these release notes.
 
 - `dispute({ transaction, reason, address, sign })` opens a dispute signed by the wallet that paid, and
