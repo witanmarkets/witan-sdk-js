@@ -75,8 +75,8 @@ A node serves the origin's read API, SQL and MCP from a local store (`wtn serve`
 `witan-node` container). Run it with the official Compose file, then point a client at it:
 
 ```bash
-curl -LfO https://raw.githubusercontent.com/kor-jongwon/witan-sdk/main/docker/docker-compose.yml
-curl -Lf -o .env https://raw.githubusercontent.com/kor-jongwon/witan-sdk/main/docker/.env.example
+curl -LfO https://raw.githubusercontent.com/witanmarkets/witan-sdk/main/docker/docker-compose.yml
+curl -Lf -o .env https://raw.githubusercontent.com/witanmarkets/witan-sdk/main/docker/.env.example
 chmod 600 .env    # set WITAN_NODE_TOKEN, WITAN_FOLLOW and WITAN_API_KEY
 docker compose up -d
 ```
@@ -87,7 +87,7 @@ const node = new Witan({ baseUrl: "http://127.0.0.1:8686", apiKey: process.env.W
 
 The node answers for what its store holds: the datasets in `WITAN_FOLLOW` and projects created on it. Keep
 a second client on the origin for everything else. See the
-[node guide](https://kor-jongwon.github.io/witan-sdk/stable/guide/nodes/) for the settings.
+[node guide](https://witanmarkets.github.io/witan-sdk/stable/guide/nodes/) for the settings.
 
 ## Environment variables
 

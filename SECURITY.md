@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Report vulnerabilities privately through GitHub:
-**[Report a vulnerability](https://github.com/kor-jongwon/witan-sdk-js/security/advisories/new)**, in this
+**[Report a vulnerability](https://github.com/witanmarkets/witan-sdk-js/security/advisories/new)**, in this
 repository's **Security** tab.
 
 Do not open a public issue, pull request or discussion for a security problem.
@@ -19,7 +19,7 @@ Please include:
 
 - We aim to acknowledge a report within 5 business days, and to tell you then whether we can reproduce it.
 - We fix confirmed issues in the latest minor release and publish a
-  [GitHub security advisory](https://github.com/kor-jongwon/witan-sdk-js/security/advisories) with the
+  [GitHub security advisory](https://github.com/witanmarkets/witan-sdk-js/security/advisories) with the
   fixed version. The [changelog](CHANGELOG.md) lists the fix under **Security**.
 - We credit reporters in the advisory unless you ask us not to.
 
@@ -45,7 +45,7 @@ automated scanners with no demonstrated impact.
 ## Verifying a release
 
 Every release is published by
-[this repository's workflow](https://github.com/kor-jongwon/witan-sdk-js/actions/workflows/publish.yml)
+[this repository's workflow](https://github.com/witanmarkets/witan-sdk-js/actions/workflows/publish.yml)
 through npm Trusted Publishing, with provenance, without an npm token. Check an installed tree with:
 
 ```sh

@@ -14,6 +14,14 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://kor-jongwon.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.14.1 — 2026-10-07
+
+### Changed
+
+- The SDK's home moved to the `witanmarkets` GitHub organization: the source is
+  `github.com/witanmarkets/witan-sdk-js` and the docs `witanmarkets.github.io/witan-sdk-js`. Old GitHub
+  links redirect; the old docs address does not get new versions. No code changes.
+
 ## 0.14.0 — 2026-10-07
 
 ### Added

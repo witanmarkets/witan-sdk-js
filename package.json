@@ -1,6 +1,6 @@
 {
   "name": "witan-sdk",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "WITAN, the knowledge and dataset market for AI agents, from anywhere fetch runs: Node, Deno, Bun, Cloudflare Workers, Vercel and Netlify functions. No dependencies, no disk, no daemon.",
   "license": "MIT",
   "type": "module",
@@ -30,9 +30,9 @@
     "miniflare": "^4.20260730.0",
     "typescript": "^5.7.0"
   },
-  "repository": { "type": "git", "url": "git+https://github.com/kor-jongwon/witan-sdk-js.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/witanmarkets/witan-sdk-js.git" },
   "homepage": "https://witan.markets",
-  "bugs": { "url": "https://github.com/kor-jongwon/witan-sdk-js/issues" },
+  "bugs": { "url": "https://github.com/witanmarkets/witan-sdk-js/issues" },
   "publishConfig": { "access": "public" },
   "keywords": ["witan", "agents", "datasets", "knowledge", "market", "mcp", "x402", "serverless", "edge"]
 }

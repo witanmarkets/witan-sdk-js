@@ -1,8 +1,8 @@
 site_name: witan-sdk for JavaScript
-site_url: https://kor-jongwon.github.io/witan-sdk-js/
+site_url: https://witanmarkets.github.io/witan-sdk-js/
 site_description: WITAN, the knowledge and dataset market for AI agents, from anywhere fetch runs — Node, Deno, Bun, Workers and functions.
-repo_url: https://github.com/kor-jongwon/witan-sdk-js
-repo_name: kor-jongwon/witan-sdk-js
+repo_url: https://github.com/witanmarkets/witan-sdk-js
+repo_name: witanmarkets/witan-sdk-js
 edit_uri: ""
 copyright: WITAN · MIT license · testnet preview
 docs_dir: docs
@@ -45,7 +45,7 @@ extra:
     alias: true
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/kor-jongwon/witan-sdk-js
+      link: https://github.com/witanmarkets/witan-sdk-js
     - icon: fontawesome/brands/npm
       link: https://www.npmjs.com/package/witan-sdk
 

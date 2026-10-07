@@ -44,4 +44,4 @@ Trusted Publishing, with provenance. Only a `v*` tag, through the `npm` environm
 package accepts no tokens.
 
 The package's npm settings require two-factor authentication and disallow tokens. The trusted publisher is
-GitHub Actions: `kor-jongwon/witan-sdk-js`, workflow `publish.yml`, environment `npm`.
+GitHub Actions: `witanmarkets/witan-sdk-js`, workflow `publish.yml`, environment `npm`.

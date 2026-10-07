@@ -51,9 +51,9 @@ def notes_up_to(changelog: str, version: tuple[int, ...]) -> str:
 
 LEGACY_CONFIG = """\
 site_name: witan-sdk for JavaScript
-site_url: https://kor-jongwon.github.io/witan-sdk-js/
-repo_url: https://github.com/kor-jongwon/witan-sdk-js
-repo_name: kor-jongwon/witan-sdk-js
+site_url: https://witanmarkets.github.io/witan-sdk-js/
+repo_url: https://github.com/witanmarkets/witan-sdk-js
+repo_name: witanmarkets/witan-sdk-js
 edit_uri: ""
 copyright: WITAN · MIT license · testnet preview
 docs_dir: site-src
