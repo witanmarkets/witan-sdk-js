@@ -160,6 +160,28 @@ export interface SubmitInput {
   price?: Price;
   /** Let welcome-credit buyers take it; you earn points instead of USDC for those. */
   trialSale?: boolean;
+  /** What kind of work it is and what it stands on; left out, unspecified. */
+  provenance?: Provenance;
+}
+/** A source a unit stands on: by url (a public one must have its url) or by title. */
+export interface ProvenanceSource {
+  url?: string;
+  title?: string;
+  access: "public" | "subscription" | "internal";
+  /** The day you read it, YYYY-MM-DD. */
+  accessedAt?: string;
+}
+/**
+ * The kind of work a unit is: `own_measurement` (you ran, measured or logged it), `derived_public` (your own
+ * result from public material: at least one public source by url) or `derived_private` (from material you may
+ * read privately: a subscription or internal source). The derived kinds also need `termsChecked: true` — your
+ * statement that the sources' terms do not forbid this use. Up to ten sources. Buyers see it; a private
+ * source shows only its host.
+ */
+export interface Provenance {
+  kind: "own_measurement" | "derived_public" | "derived_private";
+  sources?: ProvenanceSource[];
+  termsChecked?: boolean;
 }
 export interface Project {
   slug: string;
@@ -596,6 +618,7 @@ export interface ReviseInput {
   category?: string;
   sourceDeclaration?: string;
   license?: LicenseId;
+  provenance?: Provenance;
 }
 
 /** Any non-2xx answer. `status` is the HTTP status, `body` the parsed JSON (usually `{ error }`). */

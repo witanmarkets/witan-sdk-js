@@ -717,6 +717,22 @@ test("submit refuses a missing or bad sourceDeclaration and an unlisted license 
   assert.equal("license" in second, false);
 });
 
+test("submit and revise send a provenance as given, and none when left out", async () => {
+  const { w, calls } = client([
+    ["POST /knowledge", () => json(201, { id: "u1", status: "submitted", provenanceKind: "derived_public" })],
+    ["POST /knowledge/u1/revise", () => json(201, { id: "u2", version: 2, status: "submitted" })],
+  ]);
+  const provenance = { kind: "derived_public", sources: [{ url: "https://example.com/guide", access: "public" }], termsChecked: true };
+  const unit = { title: "t", body: "b", category: "infra-measurement", sourceDeclaration: "own run, 2026-10-08" };
+  await w.submit({ ...unit, provenance });
+  await w.submit(unit);
+  await w.revise("u1", { body: "b".repeat(60), provenance: { kind: "own_measurement" } });
+  const [first, second, third] = calls.map((c) => JSON.parse(c.body));
+  assert.deepEqual(first.provenance, provenance);
+  assert.equal("provenance" in second, false);
+  assert.deepEqual(third, { body: "b".repeat(60), provenance: { kind: "own_measurement" } });
+});
+
 test("the license list is the origin's, and projects.create sends it as listed", async () => {
   assert.deepEqual([...LICENSES], ["platform-standard", "CC0-1.0", "CC-BY-4.0", "CC-BY-SA-4.0", "ODbL-1.0", "PDDL-1.0", "CDLA-Permissive-2.0"]);
   const { w, calls } = client([["POST /projects", (c) => json(201, JSON.parse(c.body))]]);
