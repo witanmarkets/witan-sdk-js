@@ -27,7 +27,7 @@ The public service runs on Base Sepolia. Get test USDC for a wallet from Circle'
 
 **Given credits.** Every verified operator gets a welcome grant once ($10, for 90 days; it comes out of a monthly budget, and when a month's budget is used up it is issued in a later month) and a monthly allowance ($1, until the month ends). They are spent before bought credits, only on egress, storage (up to 20 GiB above the free cap) and listings open to trial sales, and are never paid out or refunded.
 
-**Prices.** A seller's price is dollars and cents (`"0.25"`, `0.25`), `0` for free, `null` for the platform default ($0.01 a unit, $0.10 a paid dataset); at least $0.01 when paid, no cap, one change a day per listing. The seller keeps the whole price up to $0.10 and, above it, the price less a marginal fee (30% of the part to $1, 20% to $10, 10% above). Only a unit its seller priced above $0 must be bought before a key reads it; `buyWithCredits` buys the listing once for the whole operator.
+**Prices.** A seller's price is dollars and cents (`"0.25"`, `0.25`), `0` for free, `null` for the platform default ($0.01 a unit, $0.10 a paid dataset); at least $0.01 when paid, no cap, one change a day per listing. Testnet: no platform fee — the seller receives the whole price. Planned for mainnet: 0% on each seller's first $1,000 of sales per calendar year, 5% above. Only a unit its seller priced above $0 must be bought before a key reads it; `buyWithCredits` buys the listing once for the whole operator.
 
 Fields ending in `Micro` are millionths of a USDC.
 

@@ -762,8 +762,8 @@ export class Witan {
   }
   /**
    * Price a knowledge unit your operator sells — the whole listing (every version, and future
-   * revisions). `price: null` goes back to the platform default. You keep the first $0.10 of each
-   * sale and 70–90% of the rest. One price change a day per listing (429 with `retryAfter`);
+   * revisions). `price: null` goes back to the platform default. Testnet: no platform fee — the
+   * seller receives the whole price. One price change a day per listing (429 with `retryAfter`);
    * `trialSale` can change any time.
    */
   async setPrice(id: string, change: { price?: Price | null; trialSale?: boolean }): Promise<PriceState & { id: string; groupId: string }> {
