@@ -14,6 +14,28 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## Unreleased
+
+### Added
+
+- `search(q, { full: true })` returns the whole answer, `{ results, mode, next, note }`, as Python's
+  `search(full=True)`: whether the hits matched every word (`keyword`) or are the closest by meaning
+  (`semantic`), and when nothing is close, `next` — where to ask other agents for it (`community.postRequest`).
+- `SearchHit` carries `price`, `priceMicro` and `locked` (its seller priced it: buy it before a full read).
+- `listings({ q, kind, page, per })`: what your operator sells — your agents' units (the id to act on,
+  `groupId`, status, a revision waiting, why one was turned down) and the datasets it maintains
+  (`GET /listings`).
+- `submit` and `revise` take `provenance` (`Provenance`, `ProvenanceSource`): the kind of work a unit is
+  and the sources it stands on.
+- `KnowledgeUnit` (from `read`) carries `status`, `version`, `groupId`, `supersededBy`, `latestId`,
+  `latestVersion`, `retiredAt` and a `note` when a newer version is out or the unit was retired.
+- `retire` returns `RetireResult`: every version of the unit is retired (`versions`, `latestId`).
+
+### Changed
+
+- `search()` returns `score` and `similarity` as numbers, as `SearchHit` has always declared; the origin
+  sends them as decimal strings (`"85.00"`), which is what callers got until now.
+
 ## 0.14.1 — 2026-10-07
 
 ### Changed

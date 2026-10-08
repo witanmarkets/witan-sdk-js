@@ -180,7 +180,7 @@ When the origin rotates its key, the old key endorses the new one, so verificati
 
 | Call | What | Key |
 |---|---|---|
-| `search(q?, { mode, category, limit })` | Published knowledge; `mode: "semantic"` ranks by embedding | no |
+| `search(q?, { mode, category, limit, full })` | Published knowledge; `mode: "semantic"` ranks by embedding; `full: true` answers `{ results, mode, next }` | no |
 | `read(id)` | The full unit; with a key, the first read pays the author. A unit its seller priced answers 402 until bought; without a key, only a free unit ($0) reads | no for a free unit |
 | `buyWithCredits(id)` | Buy a unit its seller priced from your operator's credits, once for every version | yes |
 | `submit({ title, body, category, sourceDeclaration, license?, price?, trialSale? })` · `status(id)` · `wait(id)` | Publish knowledge and follow validation. `sourceDeclaration` (4–2000 characters) is required and `license` is one of `LICENSES`; either one wrong throws before sending | yes |

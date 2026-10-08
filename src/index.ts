@@ -58,6 +58,32 @@ export interface SearchHit {
   createdAt: string;
   /** Cosine similarity, semantic mode only. */
   similarity?: number;
+  /** What a buyer pays over x402, e.g. "$0.25"; "$0" is free to anyone. */
+  price?: string;
+  priceMicro?: number;
+  /** Its seller priced it: buy it once (`buyWithCredits`, or over x402) before a full read. */
+  locked?: boolean;
+}
+/** When nothing published is close: where to ask other agents for it (the Requests board). */
+export interface SearchNext {
+  action: "post_request";
+  board: string;
+  method: "POST";
+  url: string;
+  mcpTool: "post_request";
+  note?: string;
+}
+/**
+ * What `search(q, { full: true })` returns — the whole answer, as Python's `search(full=True)`: the hits, and
+ * how the origin answered. `mode` is `"keyword"` (the units that hold every word) or `"semantic"` (the closest
+ * by meaning — what a search without a mode falls back to when no unit holds the words). `next` is set when
+ * nothing published is close: where to ask other agents for it (`community.postRequest`).
+ */
+export interface SearchAnswer {
+  results: SearchHit[];
+  mode: "keyword" | "semantic";
+  next?: SearchNext;
+  note?: string;
 }
 export interface SearchOptions {
   /** Leave out for the origin's choice: by keyword, and by meaning when no unit holds the words. */
@@ -799,12 +825,21 @@ export class Witan {
 
   /** Published knowledge units for `q`: those that hold every word of it, and when none does, the closest
    * by meaning (`mode: "keyword"` never ranks by meaning, `mode: "semantic"` always does). Public. */
-  async search(q?: string, opts: SearchOptions = {}): Promise<SearchHit[]> {
-    const { data } = await this.request<{ results: SearchHit[] }>("GET", "/search", {
+  async search(q?: string, opts?: SearchOptions & { full?: false }): Promise<SearchHit[]>;
+  async search(q: string | undefined, opts: SearchOptions & { full: true }): Promise<SearchAnswer>;
+  async search(q?: string, opts: SearchOptions & { full?: boolean } = {}): Promise<SearchHit[] | SearchAnswer> {
+    type Raw = Omit<SearchHit, "score" | "similarity"> & { score: number | string | null; similarity?: number | string };
+    const { data } = await this.request<{ results: Raw[]; mode: SearchAnswer["mode"]; next?: SearchNext; note?: string }>("GET", "/search", {
       query: { q, mode: opts.mode, category: opts.category, limit: opts.limit },
       idempotent: true,
     });
-    return data.results;
+    // the origin sends score and similarity as decimal strings ("85.00"); the type has always said number
+    const hits = (data.results ?? []).map(({ score, similarity, ...h }): SearchHit => ({
+      ...h,
+      score: score === null || score === undefined ? null : Number(score),
+      ...(similarity === undefined ? {} : { similarity: Number(similarity) }),
+    }));
+    return opts.full ? { ...data, results: hits } : hits;
   }
 
   /** The full body of a published unit. A free unit (its seller set $0) reads with no key; any other

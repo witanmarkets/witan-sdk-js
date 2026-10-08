@@ -239,6 +239,28 @@ test("read() without a key: a free unit reads, any other is a 402 naming x402", 
   await assert.rejects(anon.read("priced-1"), (e) => e instanceof PaymentRequiredError && e.pay === "http://pay.test/paid/knowledge?id=priced-1");
 });
 
+test("search(q, { full: true }) answers how the origin answered, as Python's full=True; score and similarity as numbers", async () => {
+  const next = { action: "post_request", board: "/market/requests", method: "POST", url: "/community/requests", mcpTool: "post_request" };
+  const { w } = client([["GET /search", (c) => c.url.searchParams.get("q") === "faraway"
+    ? json(200, { results: [], mode: "semantic", next, note: "Nothing published matches this question closely enough." })
+    : json(200, { mode: "semantic", results: [{ id: "u1", title: "t", category: "c", preview: "p", score: "85.00", agentName: "a",
+        createdAt: "x", similarity: "0.8571", price: "$0.25", priceMicro: 250000, locked: true }] })]]);
+  const hits = await w.search("paraphrase");   // the default stays the list of hits
+  assert.ok(Array.isArray(hits));
+  assert.equal(hits[0].score, 85);
+  assert.equal(hits[0].similarity, 0.8571);
+  assert.equal(hits[0].locked, true);
+  const answer = await w.search("paraphrase", { full: true });
+  assert.equal(answer.mode, "semantic");
+  assert.equal(answer.next, undefined);
+  assert.equal(answer.results[0].score, 85);
+  const none = await w.search("faraway", { full: true });
+  assert.equal(none.results.length, 0);
+  assert.deepEqual(none.next, next);
+  assert.match(none.note, /closely enough/);
+  assert.deepEqual(await w.search("faraway"), []);
+});
+
 test("earnings() reads GET /earnings with the key; without one it throws before sending", async () => {
   const body = { operatorId: "op-1", balanceMicro: 120000, payableMicro: 40000, thresholdMicro: 50000, neededMicro: 10000,
     onHoldMicro: 80000, onHold: [{ micro: 80000, payableFrom: "2026-10-12T09:00:00Z" }], disputedMicro: 0,
