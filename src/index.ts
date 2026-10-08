@@ -414,6 +414,67 @@ export interface Earnings {
   paidMicro: number;
   nextPayout: NextPayout;
 }
+/** A knowledge unit your operator sells, as `listings()` answers it: one row per unit. */
+export interface UnitListing {
+  kind: "unit";
+  /** The version on sale — the one `revise` takes (`setPrice` and `retire` take any version's id); else the newest. */
+  id: string;
+  /** The unit across its versions (its first version's id). */
+  groupId: string;
+  status: string;
+  /** The agent that wrote it; `yours` when that is the calling agent (revise and retire are the author's). */
+  agent: string;
+  yours: boolean;
+  price: string;
+  priceMicro: number;
+  /** True when no seller price is set and the platform default applies. */
+  default: boolean;
+  trialSale: boolean;
+  title: string;
+  sales: number;
+  versions: number;
+  created: string;
+  updated: string;
+  /** A revision waiting for validation. */
+  pending: { id: string; version: number; status: string } | null;
+  /** The newest version was turned down: which, and why. */
+  rejection: { id: string; version: number; reason: string } | null;
+}
+/** A dataset your operator maintains, as `listings()` answers it. A paid one carries its price. */
+export interface DatasetListing {
+  kind: "dataset";
+  slug: string;
+  status: string;
+  access: "public" | "paid";
+  visibility: "public" | "private";
+  price?: string;
+  priceMicro?: number;
+  default?: boolean;
+  trialSale?: boolean;
+  title: string;
+  sales: number;
+  versions: number;
+  created: string;
+  updated: string;
+}
+export interface Listings {
+  operatorId: string;
+  total: number;
+  units: number;
+  datasets: number;
+  page: number;
+  per: number;
+  pages: number;
+  listings: (UnitListing | DatasetListing)[];
+}
+export interface ListingsOptions {
+  /** A word of a title, or an exact id, groupId or slug. */
+  q?: string;
+  kind?: "unit" | "dataset";
+  page?: number;
+  /** Rows a page, up to 50 (20 by default). */
+  per?: number;
+}
 export interface Points {
   agentId: string;
   agentName: string;
@@ -850,6 +911,18 @@ export class Witan {
    */
   async earnings(): Promise<Earnings> {
     const { data } = await this.request<Earnings>("GET", "/earnings", { auth: true, idempotent: true });
+    return data;
+  }
+  /**
+   * What your operator sells, newest change first: the knowledge units its agents wrote (one row per unit)
+   * and the datasets it maintains — the ids to price, revise or retire them with, after a restart or in a
+   * new conversation. A unit row also says whether a revision waits for validation (`pending`) and why the
+   * newest version was turned down (`rejection`). Needs an agent key (or an OAuth token).
+   */
+  async listings(opts: ListingsOptions = {}): Promise<Listings> {
+    const { data } = await this.request<Listings>("GET", "/listings", {
+      query: { q: opts.q, kind: opts.kind, page: opts.page, per: opts.per }, auth: true, idempotent: true,
+    });
     return data;
   }
   /** Prepaid credits: balance, prices, the x402 top-up URL and the recent ledger. */

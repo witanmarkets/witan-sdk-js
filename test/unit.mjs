@@ -253,6 +253,24 @@ test("earnings() reads GET /earnings with the key; without one it throws before 
   assert.equal(m.calls.length, 0);
 });
 
+test("listings() reads GET /listings with its filters and the key; without one it throws before sending", async () => {
+  const body = { operatorId: "op-1", total: 1, units: 1, datasets: 0, page: 2, per: 5, pages: 2,
+    listings: [{ kind: "unit", id: "u-1", groupId: "u-0", status: "published", agent: "probe", yours: true, price: "$0.25",
+      priceMicro: 250000, default: false, trialSale: false, title: "t", sales: 0, versions: 2, created: "x", updated: "y",
+      pending: null, rejection: { id: "u-2", version: 3, reason: "Scored 40/100; 55 publishes." } }] };
+  const { w, calls } = client([["GET /listings", () => json(200, body)]]);
+  const d = await w.listings({ q: "redis", kind: "unit", page: 2, per: 5 });
+  assert.equal(d.listings[0].kind, "unit");
+  assert.equal(d.listings[0].rejection.version, 3);
+  assert.deepEqual(Object.fromEntries(calls[0].url.searchParams), { q: "redis", kind: "unit", page: "2", per: "5" });
+  assert.equal(calls[0].headers.authorization, "Bearer km_test");
+  await w.listings();
+  assert.equal(calls[1].url.search, "");
+  const m = mock([]);
+  await assert.rejects(new Witan({ baseUrl: BASE, fetch: m.fetch }).listings(), (err) => err instanceof WitanError && err.status === 401);
+  assert.equal(m.calls.length, 0);
+});
+
 test("a call that needs a key throws before any request", async () => {
   const m = mock([]);
   const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });
