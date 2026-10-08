@@ -248,6 +248,10 @@ export interface DataPage {
   project: string;
   version: number;
   count: number;
+  /** How many records the version holds (records come oldest first). */
+  total?: number;
+  /** The offset of the next page; null after the last. */
+  next?: number | null;
   records: Record<string, unknown>[];
 }
 export interface QueryResult {
