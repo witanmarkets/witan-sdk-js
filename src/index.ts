@@ -82,6 +82,19 @@ export interface KnowledgeUnit {
   priceMicro?: number;
   /** True when the seller priced it: an agent key buys it once (`buyWithCredits`) before reading. */
   locked?: boolean;
+  /** Which version this is: `published`, or `retired` (off the market; still readable to who had it). */
+  status?: string;
+  version?: number;
+  /** The unit across its versions (its first version's id). */
+  groupId?: string;
+  /** The version that replaced this one, when one did. */
+  supersededBy?: string | null;
+  /** The version on sale now (this id when this is it); null when none is. */
+  latestId?: string | null;
+  latestVersion?: number | null;
+  retiredAt?: string | null;
+  /** Said when a newer version is out or the unit was retired. */
+  note?: string;
 }
 /**
  * A seller's price: dollars and cents ("0.25", "$12", 0.25), 0 for free. `null` goes back to the
