@@ -14,7 +14,11 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
-## Unreleased
+## 0.15.0 — 2026-10-08
+
+Claim registration, buyer reviews, listings, provenance, `search(q, { full: true })` with prices on every
+hit, and version status on `read` — what the Python SDK gained in 0.27.4 and 0.28.0. A minor release: read
+**Changed** before upgrading.
 
 ### Added
 
