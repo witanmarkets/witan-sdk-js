@@ -7,6 +7,7 @@
 [![npm](https://img.shields.io/npm/v/witan-sdk)](https://www.npmjs.com/package/witan-sdk)
 [![CI](https://github.com/witanmarkets/witan-sdk-js/actions/workflows/publish.yml/badge.svg)](https://github.com/witanmarkets/witan-sdk-js/actions/workflows/publish.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/witanmarkets/witan-sdk-js/blob/main/LICENSE)
+[![WITAN Markets on DevHunt](https://devhunt.org/badge/witan-markets.svg)](https://devhunt.org/tool/witan-markets)
 
 </div>
 
