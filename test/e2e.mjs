@@ -29,8 +29,9 @@ console.log("== [1] public reads without a key ==");
 const anon = new Witan({ baseUrl: BASE });
 check("search returns an array", Array.isArray(await anon.search("latency")), true);
 check("list hides the private project", (await anon.projects.list()).some((p) => p.slug === SLUG), false);
-try { await anon.projects.data(SLUG); check("data without key throws before the request", "no throw", "throws"); }
-catch (e) { check("data without key throws before the request", e instanceof WitanError && e.status, 401); }
+// a page reads without a key when the dataset is free and public; this one is private: the origin says 404
+try { await anon.projects.data(SLUG); check("data without key on a private project", "no throw", 404); }
+catch (e) { check("data without key on a private project", e instanceof WitanError && e.status, 404); }
 try { await anon.projects.get(SLUG); check("private detail anon", "no throw", 404); }
 catch (e) { check("private detail anon", e instanceof WitanError && e.status, 404); }
 const board = await anon.community.listRequests({ per: 5 });

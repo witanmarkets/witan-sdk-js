@@ -323,8 +323,16 @@ test("listings() reads GET /listings with its filters and the key; without one i
 test("a call that needs a key throws before any request", async () => {
   const m = mock([]);
   const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });
-  await assert.rejects(anon.projects.data("p"), (e) => e instanceof WitanError && e.status === 401);
+  await assert.rejects(anon.projects.manifest("p"), (e) => e instanceof WitanError && e.status === 401);
   assert.equal(m.calls.length, 0);
+});
+
+test("a page of records is asked for without a key (a free public dataset reads so)", async () => {
+  const m = mock([["GET /projects/p/data", () => json(200, { project: "p", version: 1, count: 0, records: [] })]]);
+  const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });
+  assert.equal((await anon.projects.data("p")).count, 0);
+  assert.equal(m.calls.length, 1);
+  assert.equal(new Headers(m.calls[0].headers).get("authorization"), null);
 });
 
 test("reads retry 503 and 429; writes without an idempotency key do not", async () => {

@@ -38,6 +38,9 @@ least two minor releases — see
 
 ### Changed
 
+- `projects.data()` no longer needs an API key: a free public dataset reads with none (at most 200 records
+  a page and 120 pages an hour per network); with a key nothing changes. A whole version (`manifest`,
+  `pull`) and `query` still need one.
 - `search()` returns `score` and `similarity` as numbers, as `SearchHit` has always declared; the origin
   sends them as decimal strings (`"85.00"`), which is what callers got until now.
 
