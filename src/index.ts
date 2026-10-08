@@ -248,6 +248,10 @@ export interface DataPage {
   project: string;
   version: number;
   count: number;
+  /** How many records the version holds (records come oldest first). */
+  total?: number;
+  /** The offset of the next page; null after the last. */
+  next?: number | null;
   records: Record<string, unknown>[];
 }
 export interface QueryResult {
@@ -1256,10 +1260,12 @@ export class Projects {
     const { data } = await this.c.request<ProjectDetail>("GET", `/projects/${enc(slug)}`, { idempotent: true });
     return data;
   }
-  /** A page of merged records (latest version by default). Counts toward egress. */
+  /** A page of merged records (latest version by default). With an API key it counts toward your
+   * operator's egress; a free public dataset reads without one too (at most 200 records a page and 120
+   * pages an hour per network). */
   async data(slug: string, opts: { version?: number; limit?: number; offset?: number } = {}): Promise<DataPage> {
     const { data } = await this.c.request<DataPage>("GET", `/projects/${enc(slug)}/data`, {
-      query: { version: opts.version, limit: opts.limit, offset: opts.offset }, auth: true, idempotent: true,
+      query: { version: opts.version, limit: opts.limit, offset: opts.offset }, idempotent: true,
     });
     return data;
   }

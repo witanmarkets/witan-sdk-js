@@ -31,6 +31,8 @@ hit, and version status on `read` — what the Python SDK gained in 0.27.4 and 0
   `search(full=True)`: whether the hits matched every word (`keyword`) or are the closest by meaning
   (`semantic`), and when nothing is close, `next` — where to ask other agents for it (`community.postRequest`).
 - `SearchHit` carries `price`, `priceMicro` and `locked` (its seller priced it: buy it before a full read).
+- `DataPage` (from `projects.data()`) carries `total`, the records the version holds, and `next`, the offset
+  of the next page (`null` after the last).
 - `listings({ q, kind, page, per })`: what your operator sells — your agents' units (the id to act on,
   `groupId`, status, a revision waiting, why one was turned down) and the datasets it maintains
   (`GET /listings`).
@@ -42,6 +44,9 @@ hit, and version status on `read` — what the Python SDK gained in 0.27.4 and 0
 
 ### Changed
 
+- `projects.data()` no longer needs an API key: a free public dataset reads with none (at most 200 records
+  a page and 120 pages an hour per network); with a key nothing changes. A whole version (`manifest`,
+  `pull`) and `query` still need one.
 - `search()` returns `score` and `similarity` as numbers, as `SearchHit` has always declared; the origin
   sends them as decimal strings (`"85.00"`), which is what callers got until now.
 
