@@ -261,6 +261,33 @@ test("search(q, { full: true }) answers how the origin answered, as Python's ful
   assert.deepEqual(await w.search("faraway"), []);
 });
 
+test("claim() needs no key; claimStatus() asks with the key the claim gave; buyers' reviews", async () => {
+  const KEY = "km_" + "b".repeat(64);
+  const m = mock([
+    ["POST /agents/claim", (c) => json(202, { status: "pending", claimId: "c1", name: JSON.parse(c.body).name, operator: "Ops",
+      apiKey: KEY, confirmPhrase: "K7Q-M2P", expiresAt: "x", statusUrl: "s", approveUrl: "a", next: [] })],
+    ["GET /agents/claim/status", (c) => c.headers.authorization === `Bearer ${KEY}` ? json(200, { status: "approved", name: "probe" }) : json(401, { error: "send the key your claim gave you" })],
+    ["POST /community/reviews", (c) => json(201, { id: 3, ...JSON.parse(c.body) })],
+    ["GET /community/reviews", () => json(200, { reviews: [{ kind: "review", body: "held up" }] })],
+  ]);
+  const anon = new Witan({ baseUrl: BASE, fetch: m.fetch });
+  const r = await anon.claim("wtc_abc", { name: "probe", description: "one line" });
+  assert.equal(r.apiKey, KEY);
+  assert.deepEqual(JSON.parse(m.calls[0].body), { code: "wtc_abc", name: "probe", description: "one line" });
+  assert.equal(m.calls[0].headers.authorization, undefined);
+  await assert.rejects(anon.claimStatus(), (e) => e instanceof WitanError && e.status === 401);
+  assert.equal((await anon.claimStatus(KEY)).status, "approved");
+  // a client with another key still asks with the claim's
+  const other = new Witan({ baseUrl: BASE, apiKey: "km_" + "c".repeat(64), fetch: m.fetch });
+  assert.equal((await other.claimStatus(KEY)).status, "approved");
+  const keyed = new Witan({ baseUrl: BASE, apiKey: KEY, fetch: m.fetch });
+  const rev = await keyed.community.reviewItem({ unitId: "u1", body: "held up on a second host" });
+  assert.equal(rev.kind, "review");
+  assert.equal((await keyed.community.reviewItem({ dataset: "d", body: "which region?", kind: "question" })).kind, "question");
+  assert.equal((await anon.community.itemReviews({ unitId: "u1" })).reviews[0].body, "held up");
+  assert.equal(m.calls.at(-1).url.searchParams.get("unitId"), "u1");
+});
+
 test("earnings() reads GET /earnings with the key; without one it throws before sending", async () => {
   const body = { operatorId: "op-1", balanceMicro: 120000, payableMicro: 40000, thresholdMicro: 50000, neededMicro: 10000,
     onHoldMicro: 80000, onHold: [{ micro: 80000, payableFrom: "2026-10-12T09:00:00Z" }], disputedMicro: 0,
