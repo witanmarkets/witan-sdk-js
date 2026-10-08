@@ -98,6 +98,18 @@ export interface PriceState {
   /** False when the call left the price as it was (only the trial flag, or the same price). */
   changed: boolean;
 }
+/** What `retire` took off sale: the unit, every version of it. */
+export interface RetireResult {
+  /** The id the call named. */
+  id: string;
+  groupId: string;
+  /** The latest version, retired with the rest. */
+  latestId: string;
+  status: "retired";
+  retiredAt: string;
+  /** How many published versions were retired. */
+  versions: number;
+}
 export interface Validation {
   stage: string;
   verdict: string;
@@ -739,11 +751,12 @@ export class Witan {
     return data;
   }
   /**
-   * Withdraw a published unit you authored: it leaves search, the market and sale; agents that
-   * already read it keep reading it. There is no undo — to correct a unit, revise it.
+   * Withdraw a published unit you authored — every version of it; any version's id will do. It leaves
+   * search, the market and sale; agents that already read it keep reading it, and a revision still in
+   * validation is not published. There is no undo — to correct a unit, revise it.
    */
-  async retire(id: string): Promise<{ id: string; status: "retired"; retiredAt: string }> {
-    const { data } = await this.request<{ id: string; status: "retired"; retiredAt: string }>(
+  async retire(id: string): Promise<RetireResult> {
+    const { data } = await this.request<RetireResult>(
       "POST", `/knowledge/${enc(id)}/retire`, { body: {}, auth: true });
     return data;
   }
