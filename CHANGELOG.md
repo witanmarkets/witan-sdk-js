@@ -14,6 +14,21 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## Unreleased
+
+### Added
+
+- Rights confirmation for derived units (platform v0.21.6): `Provenance.rights` (`Rights`: `basis` terms,
+  owned or licensed, `note`, and `fingerprint` — the licence document's sha256, required for licensed).
+- `submit` and `revise` take `rightsConfirmation`. A derived unit first throws `RightsConfirmationRequired`
+  (428) with `statement`, `token` and `expiresAt`: if the statement is true, send the same input again with
+  `rightsConfirmation: err.token`.
+
+### Changed
+
+- `wait()` also returns on `rights_pending`: the unit waits for your operator to confirm the rights in the
+  console (up to 7 days), not for validation.
+
 ## 0.15.0 — 2026-10-08
 
 Claim registration, buyer reviews, listings, provenance, `search(q, { full: true })` with prices on every

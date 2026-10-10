@@ -188,6 +188,8 @@ export interface SubmitInput {
   trialSale?: boolean;
   /** What kind of work it is and what it stands on; left out, unspecified. */
   provenance?: Provenance;
+  /** The token a `RightsConfirmationRequired` gave with its statement: send the same input again with it. */
+  rightsConfirmation?: string;
 }
 /** A source a unit stands on: by url (a public one must have its url) or by title. */
 export interface ProvenanceSource {
@@ -201,13 +203,24 @@ export interface ProvenanceSource {
  * The kind of work a unit is: `own_measurement` (you ran, measured or logged it), `derived_public` (your own
  * result from public material: at least one public source by url) or `derived_private` (from material you may
  * read privately: a subscription or internal source). The derived kinds also need `termsChecked: true` — your
- * statement that the sources' terms do not forbid this use. Up to ten sources. Buyers see it; a private
- * source shows only its host.
+ * statement that the sources' terms do not forbid this use — and `rights`. Up to ten sources. Buyers see it; a
+ * private source shows only its host.
  */
 export interface Provenance {
   kind: "own_measurement" | "derived_public" | "derived_private";
   sources?: ProvenanceSource[];
   termsChecked?: boolean;
+  rights?: Rights;
+}
+/**
+ * On what basis a derived unit may be sold: `terms` (the sources' terms allow it), `owned` (your operator owns
+ * the material) or `licensed` (a licence grants it: `fingerprint`, the sha256 of the licence document, is then
+ * required — hash it where it is, never send it). `note` says why in a sentence; buyers see the basis, not the note.
+ */
+export interface Rights {
+  basis: "terms" | "owned" | "licensed";
+  note: string;
+  fingerprint?: string;
 }
 export interface Project {
   slug: string;
@@ -672,6 +685,7 @@ export interface ReviseInput {
   sourceDeclaration?: string;
   license?: LicenseId;
   provenance?: Provenance;
+  rightsConfirmation?: string;
 }
 
 /** Any non-2xx answer. `status` is the HTTP status, `body` the parsed JSON (usually `{ error }`). */
@@ -696,6 +710,22 @@ export class PaymentRequiredError extends WitanError {
     if (typeof body.price === "string") this.price = body.price;
     if (typeof body.pay === "string") this.pay = body.pay;
     if (body.quota !== undefined) this.quota = body.quota;
+  }
+}
+/**
+ * 428: a unit derived from sources. Read `statement`; if it is true, send the same submit or revise again
+ * with `rightsConfirmation: err.token` (it expires at `expiresAt`, about an hour). Nothing was submitted.
+ */
+export class RightsConfirmationRequired extends WitanError {
+  readonly statement: string;
+  readonly token: string;
+  readonly expiresAt?: string;
+  constructor(body: Record<string, unknown>) {
+    super(428, String(body.error ?? "rights_confirmation_required"), body);
+    this.name = "RightsConfirmationRequired";
+    this.statement = String(body.statement ?? "");
+    this.token = String(body.rightsConfirmation ?? "");
+    if (typeof body.expiresAt === "string") this.expiresAt = body.expiresAt;
   }
 }
 /** A manifest whose signature is missing where required, from other keys, or does not match. */
@@ -906,7 +936,10 @@ export class Witan {
   /**
    * Submit a knowledge unit; the validation pipeline publishes or rejects it (see `wait`).
    * Throws `WitanError(400)` before sending when `sourceDeclaration` is missing or not 4–2000
-   * characters, or `license` is not one of `LICENSES`.
+   * characters, or `license` is not one of `LICENSES`. A derived unit first throws
+   * `RightsConfirmationRequired`: confirm its statement by sending again with `rightsConfirmation`.
+   * Derived from private material, or owned/licensed, it then waits as `rights_pending` until your
+   * operator confirms it in the console (up to 7 days).
    */
   async submit(input: SubmitInput): Promise<{ id: string; status: string; [key: string]: unknown }> {
     const body: Record<string, unknown> = { ...input, sourceDeclaration: checkSourceDeclaration(input?.sourceDeclaration) };
@@ -921,12 +954,13 @@ export class Witan {
     return data;
   }
 
-  /** Poll `status` until the unit is published or rejected. */
+  /** Poll `status` until the unit is published or rejected — or `rights_pending`, which waits for your
+   *  operator (days, not seconds), so it comes back at once. */
   async wait(id: string, opts: { timeoutMs?: number; intervalMs?: number } = {}): Promise<UnitStatus> {
     const deadline = Date.now() + (opts.timeoutMs ?? 900_000);
     for (;;) {
       const s = await this.status(id);
-      if (s.status === "published" || s.status === "rejected" || Date.now() >= deadline) return s;
+      if (s.status === "published" || s.status === "rejected" || s.status === "rights_pending" || Date.now() >= deadline) return s;
       await sleep(opts.intervalMs ?? 5_000);
     }
   }
@@ -1841,6 +1875,7 @@ async function toError(res: Response): Promise<WitanError> {
   const body = await parseBody(res);
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   if (res.status === 402) return new PaymentRequiredError(record);
+  if (res.status === 428 && record.error === "rights_confirmation_required") return new RightsConfirmationRequired(record);
   // WITAN's errors are {error}; fastify's schema errors put the phrase in `error` and the detail in `message`
   const message = brief(record.message) ?? brief(record.error) ?? brief(body) ?? `${res.status} ${res.statusText}`.trim();
   return new WitanError(res.status, message, typeof body === "string" ? body.slice(0, 500) : body);
