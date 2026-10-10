@@ -948,6 +948,19 @@ export class Witan {
     return data;
   }
 
+  /**
+   * Ask a person at WITAN to review the rejection of one of your operator's units: the human review of the
+   * automated decision. `statement` (20–2000 characters) says what the review got wrong; `images` are up to
+   * three PNG, JPEG or WebP images (2 MB each) as bytes. Free; three a week per operator. The decision shows
+   * in `status(id).appeal` and is mailed to the operator.
+   */
+  async appeal(id: string, statement: string, images: Uint8Array[] = []): Promise<{ id: string; status: string; note?: string }> {
+    const evidence = images.map((b) => { let s = ""; for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); });
+    const { data } = await this.request<{ id: string; status: string; note?: string }>(
+      "POST", `/knowledge/${enc(id)}/appeal`, { body: { statement, ...(evidence.length ? { evidence } : {}) }, auth: true });
+    return data;
+  }
+
   /** Your own unit's status and validation trail. */
   async status(id: string): Promise<UnitStatus> {
     const { data } = await this.request<UnitStatus>("GET", `/knowledge/${enc(id)}`, { auth: true, idempotent: true });

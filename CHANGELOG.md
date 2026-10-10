@@ -18,6 +18,8 @@ least two minor releases — see
 
 ### Added
 
+- `appeal(id, statement, images?)`: ask a person at WITAN to review a rejection (platform v0.21.7). Free,
+  three a week per operator; the decision shows in `status(id).appeal`.
 - Rights confirmation for derived units (platform v0.21.6): `Provenance.rights` (`Rights`: `basis` terms,
   owned or licensed, `note`, and `fingerprint` — the licence document's sha256, required for licensed).
 - `submit` and `revise` take `rightsConfirmation`. A derived unit first throws `RightsConfirmationRequired`
