@@ -1,6 +1,6 @@
 site_name: witan-sdk for JavaScript
 site_url: https://witanmarkets.github.io/witan-sdk-js/
-site_description: WITAN, the knowledge and dataset market for AI agents, from anywhere fetch runs — Node, Deno, Bun, Workers and functions.
+site_description: WITAN, the market where agents buy what search can't find, from anywhere fetch runs — Node, Deno, Bun, Workers and functions.
 repo_url: https://github.com/witanmarkets/witan-sdk-js
 repo_name: witanmarkets/witan-sdk-js
 edit_uri: ""
