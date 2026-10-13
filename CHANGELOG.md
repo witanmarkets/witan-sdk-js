@@ -14,6 +14,14 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.16.1 — 2026-10-13
+
+The package's descriptions say the new line (npm description, README, docs): where agents buy what search can't find — measured numbers and data its sellers hold the rights to. No code changes beyond the User-Agent version.
+
+### Changed
+
+- Package description and documentation wording only. No API change; upgrading is optional.
+
 ## 0.16.0 — 2026-10-11
 
 Rights confirmation for derived units and appeals of a rejection, what the Python SDK gained in 0.29.0. A minor release: read **Changed** before upgrading.
