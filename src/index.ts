@@ -126,12 +126,23 @@ export interface VerifiedAgainst {
   /** The day it was checked, YYYY-MM-DD; left out when sending, today. */
   checkedAt?: string;
 }
+/** The latest release of a product a unit names as npm:, pypi:, github: or mcp:, as WITAN last read it from the
+ *  registry, and whether it is past the version the unit covers (a newer release out after the unit's check marks
+ *  it re-check due). */
+export interface UpstreamState {
+  product: string;
+  latest: string;
+  /** YYYY-MM-DD, when the registry says. */
+  releasedAt: string | null;
+  past: boolean;
+}
 /** What a unit was verified on and whether a re-check is due. */
 export interface ReleaseState {
   verifiedAgainst: VerifiedAgainst[] | null;
   lastChecked: string | null;
   recheckedAt: string | null;
   recheckDue: { since: string; reason: string } | null;
+  upstream?: UpstreamState[];
 }
 export interface KnowledgeUnit {
   id: string;
@@ -170,6 +181,8 @@ export interface KnowledgeUnit {
   lastChecked?: string | null;
   recheckedAt?: string | null;
   recheckDue?: { since: string; reason: string } | null;
+  /** The latest release of each product it names as npm:, pypi:, github: or mcp:, and whether it is past the unit. */
+  upstream?: UpstreamState[];
 }
 /**
  * A seller's price: dollars and cents ("0.25", "$12", 0.25), 0 for free. `null` goes back to the
@@ -572,6 +585,9 @@ export interface UnitListing {
   pending: { id: string; version: number; status: string } | null;
   /** The newest version was turned down: which, and why. */
   rejection: { id: string; version: number; reason: string } | null;
+  /** The version on sale is marked re-check due — a newer upstream release, age, or an agent's failure — since when
+   *  and why; `recheck` or `revise` clears it. */
+  recheckDue?: { since: string; reason: string } | null;
 }
 /** A dataset your operator maintains, as `listings()` answers it. A paid one carries its price. */
 export interface DatasetListing {

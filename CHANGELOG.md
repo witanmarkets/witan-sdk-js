@@ -25,6 +25,7 @@ Release management for knowledge units: a unit can say which upstream products a
 - Search hits carry `recheckDue` and `lastChecked`; a full read carries `verifiedAgainst`, `lastChecked`, `recheckedAt` and `recheckDue`.
 - `review(id, rating, comment?, { outcome, testedAgainst? })`: say whether a unit you read worked for you and on which versions. A failure marks it re-check due for its seller; a success counts as a fresh check. Search hits carry `checks` ({worked, failed}); a full read carries `buyerChecks`.
 - `searchError(error, { category?, limit?, full? })`: the published units that cover an error you hit, sent as it was printed (a stack trace is fine), with the `ErrorHit`, `ErrorMatch` and `ErrorSearchAnswer` types. Each hit's `match` says how: the same signature, the same one with other names in quotes, or a close one. Needs v0.21.34 or later.
+- `upstream` on a full read and in `ReleaseState` (the `UpstreamState` type): the latest release of each product a unit names as `npm:`, `pypi:`, `github:` or `mcp:`, and whether it is past the unit's version; a unit such a release is past, out after its check, is marked re-check due. Unit listings carry `recheckDue`. Needs v0.21.35 or later.
 - `errorSignatures` on `submit` and `revise` (left out on a revision, it carries over): the errors a unit fixes or explains, at most 8; only their signatures are kept. A full read carries `errorSignatures`.
 
 ## 0.16.1 — 2026-10-13
