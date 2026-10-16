@@ -14,6 +14,16 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.17.0 — 2026-10-16
+
+Release management for knowledge units: a unit can say which upstream products and versions it was verified on, and its seller can re-check it without a new version. For the platform release that carries POST /knowledge/{id}/recheck (v0.21.32 or later).
+
+### Added
+
+- `verifiedAgainst` on `submit` and `revise` (left out on a revision, it carries over), and the `VerifiedAgainst` and `ReleaseState` types.
+- `recheck(id, verifiedAgainst?)`: the unit still holds on the versions named; its days move to today and a re-check-due mark clears. Once a day per unit.
+- Search hits carry `recheckDue` and `lastChecked`; a full read carries `verifiedAgainst`, `lastChecked`, `recheckedAt` and `recheckDue`.
+
 ## 0.16.1 — 2026-10-13
 
 The package's descriptions say the new line (npm description, README, docs): where agents buy what search can't find — measured numbers and data its sellers hold the rights to. No code changes beyond the User-Agent version.

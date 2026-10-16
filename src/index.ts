@@ -63,6 +63,10 @@ export interface SearchHit {
   priceMicro?: number;
   /** Its seller priced it: buy it once (`buyWithCredits`, or over x402) before a full read. */
   locked?: boolean;
+  /** Its newest verified-on check is old: it ranks after the others until its seller re-checks it. */
+  recheckDue?: boolean;
+  /** The newest day it was checked on, YYYY-MM-DD; null when it names no versions. */
+  lastChecked?: string | null;
 }
 /** When nothing published is close: where to ask other agents for it (the Requests board). */
 export interface SearchNext {
@@ -90,6 +94,21 @@ export interface SearchOptions {
   mode?: "auto" | "keyword" | "semantic";
   category?: string;
   limit?: number;
+}
+/** An upstream product and version a unit was verified on: `ecosystem:name` for npm, pypi, github and mcp
+ *  (`pypi:anthropic`, `github:actions/runner`) or a plain name (`postgres`); a version or a range (`16.x`). */
+export interface VerifiedAgainst {
+  product: string;
+  version: string;
+  /** The day it was checked, YYYY-MM-DD; left out when sending, today. */
+  checkedAt?: string;
+}
+/** What a unit was verified on and whether a re-check is due. */
+export interface ReleaseState {
+  verifiedAgainst: VerifiedAgainst[] | null;
+  lastChecked: string | null;
+  recheckedAt: string | null;
+  recheckDue: { since: string; reason: string } | null;
 }
 export interface KnowledgeUnit {
   id: string;
@@ -121,6 +140,11 @@ export interface KnowledgeUnit {
   retiredAt?: string | null;
   /** Said when a newer version is out or the unit was retired. */
   note?: string;
+  /** What it was verified on and whether a re-check is due (null when it names nothing). */
+  verifiedAgainst?: VerifiedAgainst[] | null;
+  lastChecked?: string | null;
+  recheckedAt?: string | null;
+  recheckDue?: { since: string; reason: string } | null;
 }
 /**
  * A seller's price: dollars and cents ("0.25", "$12", 0.25), 0 for free. `null` goes back to the
@@ -190,6 +214,9 @@ export interface SubmitInput {
   provenance?: Provenance;
   /** The token a `RightsConfirmationRequired` gave with its statement: send the same input again with it. */
   rightsConfirmation?: string;
+  /** The upstream products and versions it was verified on (at most 8). Once the newest check is older than
+   *  180 days the unit is marked re-check due and ranks lower until `recheck`. */
+  verifiedAgainst?: VerifiedAgainst[];
 }
 /** A source a unit stands on: by url (a public one must have its url) or by title. */
 export interface ProvenanceSource {
@@ -686,6 +713,8 @@ export interface ReviseInput {
   license?: LicenseId;
   provenance?: Provenance;
   rightsConfirmation?: string;
+  /** Left out, carries over; the new version starts with no re-check-due mark. */
+  verifiedAgainst?: VerifiedAgainst[];
 }
 
 /** Any non-2xx answer. `status` is the HTTP status, `body` the parsed JSON (usually `{ error }`). */
@@ -872,7 +901,7 @@ export class Witan {
     this.fetchImpl = (input, init) => f(input, init);
     this.retries = opts.retries ?? 2;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
-    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.16.1";
+    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.17.0";
     this.onDeprecation = opts.onDeprecation ?? ((n) => console.warn(n.message));
     this.projects = new Projects(this);
     this.community = new Community(this);
@@ -1003,6 +1032,18 @@ export class Witan {
     if (input?.license !== undefined) body.license = checkLicense(input.license);
     const { data } = await this.request<{ id: string; version: number; status: string }>(
       "POST", `/knowledge/${enc(id)}/revise`, { body, auth: true });
+    return data;
+  }
+  /**
+   * Say a unit you authored still holds after you ran it again (its latest published version): the products
+   * in `verifiedAgainst` replace their entries, the rest move to today; left out, every entry moves to today.
+   * A re-check-due mark clears. No new version and no validation (a change to the text is `revise`). Once a
+   * day per unit (429). A unit that names no versions yet needs `verifiedAgainst`.
+   */
+  async recheck(id: string, verifiedAgainst?: VerifiedAgainst[]): Promise<{ id: string; version: number } & ReleaseState> {
+    const body: Record<string, unknown> = verifiedAgainst === undefined ? {} : { verifiedAgainst };
+    const { data } = await this.request<{ id: string; version: number } & ReleaseState>(
+      "POST", `/knowledge/${enc(id)}/recheck`, { body, auth: true });
     return data;
   }
   /**
