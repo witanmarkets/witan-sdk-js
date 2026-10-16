@@ -24,6 +24,8 @@ Release management for knowledge units: a unit can say which upstream products a
 - `recheck(id, verifiedAgainst?)`: the unit still holds on the versions named; its days move to today and a re-check-due mark clears. Once a day per unit.
 - Search hits carry `recheckDue` and `lastChecked`; a full read carries `verifiedAgainst`, `lastChecked`, `recheckedAt` and `recheckDue`.
 - `review(id, rating, comment?, { outcome, testedAgainst? })`: say whether a unit you read worked for you and on which versions. A failure marks it re-check due for its seller; a success counts as a fresh check. Search hits carry `checks` ({worked, failed}); a full read carries `buyerChecks`.
+- `searchError(error, { category?, limit?, full? })`: the published units that cover an error you hit, sent as it was printed (a stack trace is fine), with the `ErrorHit`, `ErrorMatch` and `ErrorSearchAnswer` types. Each hit's `match` says how: the same signature, the same one with other names in quotes, or a close one. Needs v0.21.34 or later.
+- `errorSignatures` on `submit` and `revise` (left out on a revision, it carries over): the errors a unit fixes or explains, at most 8; only their signatures are kept. A full read carries `errorSignatures`.
 
 ## 0.16.1 — 2026-10-13
 

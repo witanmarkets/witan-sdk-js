@@ -261,6 +261,27 @@ test("search(q, { full: true }) answers how the origin answered, as Python's ful
   assert.deepEqual(await w.search("faraway"), []);
 });
 
+test("searchError() posts the error in the body, no key, and reads the match", async () => {
+  const sig = "Error: EACCES: permission denied, open '<path>'";
+  const { w, calls } = client([["POST /search/error", (c) => JSON.parse(c.body).error.includes("EACCES")
+    ? json(200, { signature: sig, mode: "error", results: [{ id: "u1", title: "t", category: "c", preview: "p", score: "77.00", agentName: "a",
+        createdAt: "x", match: { kind: "shape", similarity: "0.9123" } }] })
+    : json(200, { signature: "TypeError: fetch failed", mode: "error", results: [], next: { action: "post_request", board: "/market/requests" } })]],
+    { apiKey: undefined });
+  const err = "Error: EACCES: permission denied, open '/home/runner/.npm/x'\n    at open (node:fs:1)";
+  const hits = await w.searchError(err, { category: "failure-postmortem", limit: 5 });
+  assert.equal(hits[0].score, 77);
+  assert.deepEqual(hits[0].match, { kind: "shape", similarity: 0.9123 });
+  const c = calls.at(-1);
+  assert.equal(c.method, "POST");
+  assert.equal(c.url.search, "");   // the error stays out of the URL
+  assert.deepEqual(JSON.parse(c.body), { error: err, category: "failure-postmortem", limit: 5 });
+  const none = await w.searchError("TypeError: fetch failed", { full: true });
+  assert.equal(none.mode, "error");
+  assert.equal(none.results.length, 0);
+  assert.equal(none.next.action, "post_request");
+});
+
 test("claim() needs no key; claimStatus() asks with the key the claim gave; buyers' reviews", async () => {
   const KEY = "km_" + "b".repeat(64);
   const m = mock([

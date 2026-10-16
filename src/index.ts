@@ -95,6 +95,29 @@ export interface SearchOptions {
   category?: string;
   limit?: number;
 }
+/** How `searchError` matched a unit: the same signature, the same one with other names in quotes, or a close one
+ *  (pg_trgm similarity, 0.5 or more). `signature` is the one it matched when its seller named it. */
+export interface ErrorMatch {
+  kind: "exact" | "shape" | "similar";
+  similarity: number;
+  signature?: string;
+}
+export interface ErrorHit extends SearchHit {
+  match: ErrorMatch;
+}
+/** What `searchError(error, { full: true })` returns: the error's signature as the origin read it (paths,
+ *  addresses, ids, times and keys replaced), the hits, and `next` when no unit covers it. */
+export interface ErrorSearchAnswer {
+  signature: string;
+  results: ErrorHit[];
+  mode: "error";
+  next?: SearchNext;
+}
+export interface ErrorSearchOptions {
+  category?: string;
+  /** 1–50, 10 by default. */
+  limit?: number;
+}
 /** An upstream product and version a unit was verified on: `ecosystem:name` for npm, pypi, github and mcp
  *  (`pypi:anthropic`, `github:actions/runner`) or a plain name (`postgres`); a version or a range (`16.x`). */
 export interface VerifiedAgainst {
@@ -140,6 +163,8 @@ export interface KnowledgeUnit {
   retiredAt?: string | null;
   /** Said when a newer version is out or the unit was retired. */
   note?: string;
+  /** The errors its seller says it covers, as signatures (empty when it names none). */
+  errorSignatures?: string[];
   /** What it was verified on and whether a re-check is due (null when it names nothing). */
   verifiedAgainst?: VerifiedAgainst[] | null;
   lastChecked?: string | null;
@@ -217,6 +242,9 @@ export interface SubmitInput {
   /** The upstream products and versions it was verified on (at most 8). Once the newest check is older than
    *  180 days the unit is marked re-check due and ranks lower until `recheck`. */
   verifiedAgainst?: VerifiedAgainst[];
+  /** The errors it fixes or explains, as they were printed (the first line is enough; at most 8): agents that hit
+   *  one find it with `searchError`. Only their signatures are kept and shown. */
+  errorSignatures?: string[];
 }
 /** A source a unit stands on: by url (a public one must have its url) or by title. */
 export interface ProvenanceSource {
@@ -715,6 +743,8 @@ export interface ReviseInput {
   rightsConfirmation?: string;
   /** Left out, carries over; the new version starts with no re-check-due mark. */
   verifiedAgainst?: VerifiedAgainst[];
+  /** Left out, carries over. */
+  errorSignatures?: string[];
 }
 
 /** Any non-2xx answer. `status` is the HTTP status, `body` the parsed JSON (usually `{ error }`). */
@@ -950,6 +980,26 @@ export class Witan {
       ...h,
       score: score === null || score === undefined ? null : Number(score),
       ...(similarity === undefined ? {} : { similarity: Number(similarity) }),
+    }));
+    return opts.full ? { ...data, results: hits } : hits;
+  }
+
+  /** Published knowledge units that cover an error you hit. Send the error as it was printed (its first line is
+   * enough; a stack trace is fine, up to 4,000 characters): the origin reduces it to its signature and matches the
+   * same signature, then the same one with other names in quotes, then a close one — `match` on each hit says
+   * which. Public; sent in a POST body, never in a URL, and only its signature is kept. */
+  async searchError(error: string, opts?: ErrorSearchOptions & { full?: false }): Promise<ErrorHit[]>;
+  async searchError(error: string, opts: ErrorSearchOptions & { full: true }): Promise<ErrorSearchAnswer>;
+  async searchError(error: string, opts: ErrorSearchOptions & { full?: boolean } = {}): Promise<ErrorHit[] | ErrorSearchAnswer> {
+    type Raw = Omit<ErrorHit, "score"> & { score: number | string | null };
+    const { data } = await this.request<Omit<ErrorSearchAnswer, "results"> & { results: Raw[] }>("POST", "/search/error", {
+      body: { error, ...(opts.category === undefined ? {} : { category: opts.category }), ...(opts.limit === undefined ? {} : { limit: opts.limit }) },
+      idempotent: true,
+    });
+    const hits = (data.results ?? []).map(({ score, ...h }): ErrorHit => ({
+      ...h,
+      score: score === null || score === undefined ? null : Number(score),
+      match: { ...h.match, similarity: Number(h.match?.similarity) },
     }));
     return opts.full ? { ...data, results: hits } : hits;
   }
