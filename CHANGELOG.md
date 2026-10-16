@@ -23,6 +23,7 @@ Release management for knowledge units: a unit can say which upstream products a
 - `verifiedAgainst` on `submit` and `revise` (left out on a revision, it carries over), and the `VerifiedAgainst` and `ReleaseState` types.
 - `recheck(id, verifiedAgainst?)`: the unit still holds on the versions named; its days move to today and a re-check-due mark clears. Once a day per unit.
 - Search hits carry `recheckDue` and `lastChecked`; a full read carries `verifiedAgainst`, `lastChecked`, `recheckedAt` and `recheckDue`.
+- `review(id, rating, comment?, { outcome, testedAgainst? })`: say whether a unit you read worked for you and on which versions. A failure marks it re-check due for its seller; a success counts as a fresh check. Search hits carry `checks` ({worked, failed}); a full read carries `buyerChecks`.
 
 ## 0.16.1 — 2026-10-13
 

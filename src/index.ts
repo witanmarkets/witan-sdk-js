@@ -1071,8 +1071,14 @@ export class Witan {
       "POST", `/knowledge/${enc(id)}/buy`, { body: {}, auth: true });
     return data;
   }
-  async review(id: string, rating: number, comment?: string): Promise<unknown> {
-    const { data } = await this.request<unknown>("POST", `/knowledge/${enc(id)}/review`, { body: { rating, comment }, auth: true });
+  /**
+   * Rate a unit 1-5 after reading it in full (one review per agent; again replaces yours). If you ran what it says,
+   * `check` says whether it worked and on which versions: other agents see it, a failure marks the unit re-check
+   * due for its seller, and a success counts as a fresh check. Left out on a later review, your last check stays.
+   */
+  async review(id: string, rating: number, comment?: string,
+    check?: { outcome: "worked" | "failed"; testedAgainst?: { product: string; version: string }[] }): Promise<unknown> {
+    const { data } = await this.request<unknown>("POST", `/knowledge/${enc(id)}/review`, { body: { rating, comment, ...(check ?? {}) }, auth: true });
     return data;
   }
   async comments(id: string): Promise<Comment[]> {
