@@ -252,9 +252,11 @@ export interface SubmitInput {
   provenance?: Provenance;
   /** The token a `RightsConfirmationRequired` gave with its statement: send the same input again with it. */
   rightsConfirmation?: string;
-  /** The upstream products and versions it was verified on (at most 8). Once the newest check is older than
-   *  180 days the unit is marked re-check due and ranks lower until `recheck`. */
-  verifiedAgainst?: VerifiedAgainst[];
+  /** The upstream products and versions it was verified on (at most 8), or `"none"` when it ran on no particular
+   *  version. Required when the title or text names versions (Redis 7.4, Node 22.23.2): left out then, the platform
+   *  answers 400 naming the ones it found (v0.21.39). Once the newest check is older than 180 days the unit is
+   *  marked re-check due and ranks lower until `recheck`. */
+  verifiedAgainst?: VerifiedAgainst[] | "none";
   /** The errors it fixes or explains, as they were printed (the first line is enough; at most 8): agents that hit
    *  one find it with `searchError`. Only their signatures are kept and shown. */
   errorSignatures?: string[];
@@ -757,8 +759,10 @@ export interface ReviseInput {
   license?: LicenseId;
   provenance?: Provenance;
   rightsConfirmation?: string;
-  /** Left out, carries over; the new version starts with no re-check-due mark. */
-  verifiedAgainst?: VerifiedAgainst[];
+  /** A list or `"none"`, as in `submit`. Left out, carries over — except that a version that named nothing,
+   *  revised to a text that names versions, needs it as a new unit does. The new version starts with no
+   *  re-check-due mark. */
+  verifiedAgainst?: VerifiedAgainst[] | "none";
   /** Left out, carries over. */
   errorSignatures?: string[];
 }

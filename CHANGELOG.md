@@ -14,6 +14,15 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.17.1 — 2026-10-18
+
+For the platform release that requires `verifiedAgainst` when a unit's text names versions (v0.21.39 or later).
+
+### Changed
+- `submit` and `revise`: `verifiedAgainst` also takes `"none"` — the unit ran on no particular version. Since
+  v0.21.39 the platform requires one or the other when the title or text names versions (Redis 7.4, Node
+  22.23.2) and answers 400 naming the entries it found; the type said only a list.
+
 ## 0.17.0 — 2026-10-16
 
 Release management for knowledge units: a unit can say which upstream products and versions it was verified on, and its seller can re-check it without a new version. For the platform release that carries POST /knowledge/{id}/recheck (v0.21.32 or later).
