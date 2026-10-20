@@ -26,8 +26,8 @@ jobs:
       matrix:
         node: ["22", "24", "26"]   # README, Requirements: Node.js 22 or newer
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
       - run: npm install --no-audit --no-fund
@@ -47,8 +47,8 @@ jobs:
           - { runtime: bun, version: "1.3.3" }
           - { runtime: bun, version: "latest" }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       - run: npm install --no-audit --no-fund && npm run build
@@ -69,8 +69,8 @@ jobs:
   edge-and-types:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       - run: npm install --no-audit --no-fund && npm run build
@@ -86,9 +86,9 @@ jobs:
       contents: read
       id-token: write   # the OIDC token npm trusts; nothing else authenticates this job
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # no registry-url / always-auth here: with them npm looks for a token and fails
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "24"
       - name: npm 11.15+ (trusted publishing needs 11.5.1, staged publishing 11.15)
@@ -142,7 +142,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: The GitHub Release, with the CHANGELOG.md entry
         env:
           GH_TOKEN: ${{ github.token }}
