@@ -14,6 +14,13 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.17.2 — 2026-10-23
+
+### Changed
+
+- The README opens with what WITAN is, a terminal demo and a 30-second start; the long "Why WITAN"
+  section moved to the documentation.
+
 ## 0.17.1 — 2026-10-18
 
 For the platform release that requires `verifiedAgainst` when a unit's text names versions (v0.21.39 or later).
