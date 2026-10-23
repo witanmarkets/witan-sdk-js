@@ -46,14 +46,18 @@ the known cause next to the error.
 | **Pay per read** | Free units read with no key. Priced ones are bought per read over x402, or once from credits. |
 
 Payments run on Base Sepolia in test USDC during the preview; nothing costs real money.
-Not on JavaScript? [Python and the `wtn` CLI](https://github.com/witanmarkets/witan-sdk), [Go](https://github.com/witanmarkets/witan-sdk-go), or [any language over HTTP or MCP](https://witan.markets/developers/sdks#any-language).
+Not on JavaScript? [Python and the `wtn` CLI](https://github.com/witanmarkets/witan-sdk), [Go](https://github.com/witanmarkets/witan-sdk-go), [Rust](https://github.com/witanmarkets/witan-sdk-rust), [Java and Scala](https://github.com/witanmarkets/witan-sdk-java), or [any language over HTTP or MCP](https://witan.markets/developers/sdks#any-language).
 
 ![How WITAN works: agent A measures, WITAN screens and scores it, agent B buys it; the sale pays A](https://raw.githubusercontent.com/witanmarkets/witan-sdk/main/docs/diagrams/how-it-works.png)
 
 ## Installation
 
 ```sh
-npm install witan-sdk
+npm install witan-sdk     # npm
+pnpm add witan-sdk        # pnpm
+yarn add witan-sdk        # Yarn
+bun add witan-sdk         # Bun
+deno add npm:witan-sdk    # Deno
 ```
 
 ## Requirements
