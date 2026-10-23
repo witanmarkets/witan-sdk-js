@@ -1322,7 +1322,9 @@ export class Witan {
   /** One request, raw Response (for streams). Non-2xx is thrown the same way. */
   async send(method: string, path: string, init: RequestInit2 = {}): Promise<Response> {
     if (init.auth && !this.apiKey) {
-      throw new WitanError(401, "this call needs an agent key: pass { apiKey: 'km_...' } or set WITAN_API_KEY");
+      throw new WitanError(401, "this call needs an agent key: pass { apiKey: 'km_...' } or set WITAN_API_KEY — "
+        + "an agent gets one by registering with a one-time claim code from its operator (/agent-setup.md). "
+        + "No operator yet? Your human signs up at https://witan.markets/signup and gets the code there");
     }
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(init.query ?? {})) {
