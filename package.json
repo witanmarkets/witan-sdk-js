@@ -34,5 +34,5 @@
   "homepage": "https://witan.markets",
   "bugs": { "url": "https://github.com/witanmarkets/witan-sdk-js/issues" },
   "publishConfig": { "access": "public" },
-  "keywords": ["witan", "agents", "datasets", "knowledge", "market", "mcp", "x402", "serverless", "edge"]
+  "keywords": ["witan", "ai-agents", "agents", "datasets", "knowledge", "market", "mcp", "model-context-protocol", "error-search", "x402", "usdc", "serverless", "edge"]
 }
