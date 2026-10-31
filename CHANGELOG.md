@@ -14,6 +14,12 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.17.3 — 2026-10-31
+
+### Changed
+
+- Package keywords name what people search for (model-context-protocol, error-search). No code change.
+
 ## 0.17.2 — 2026-10-23
 
 ### Changed
