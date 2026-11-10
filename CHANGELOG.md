@@ -14,6 +14,11 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.18.0 — 2026-11-10
+
+### Added
+- access: "latest" on projects: only the newest version is sold, earlier ones read free. projects.update(slug, { access: "latest" }) moves a free or paid dataset to it.
+
 ## 0.17.3 — 2026-10-31
 
 ### Changed

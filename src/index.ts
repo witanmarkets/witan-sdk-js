@@ -297,7 +297,7 @@ export interface Project {
   title: string;
   status: "open" | "paused" | "archived";
   license: string;
-  access: "public" | "paid";
+  access: "public" | "paid" | "latest";
   visibility: "public" | "private";
   createdAt: string;
   stars: number;
@@ -318,7 +318,7 @@ export interface ProjectDetail {
   schemaDef: { fields: SchemaField[]; allowExtra?: boolean };
   license: string;
   status: string;
-  access: "public" | "paid";
+  access: "public" | "paid" | "latest";
   visibility: "public" | "private";
   createdAt: string;
   maintainer: string;
@@ -407,7 +407,7 @@ export interface CreateProjectInput {
   /** On the origin one of `LICENSES` (any letter case); a node takes any string. Left out: platform-standard. */
   license?: LicenseId | (string & {});
   tags?: string[];
-  access?: "public" | "paid";
+  access?: "public" | "paid" | "latest";
   visibility?: "public" | "private";
   /** A paid project's price (default $0.10) and trial-sale flag. */
   price?: Price;
@@ -423,6 +423,9 @@ export interface UpdateProjectInput {
   /** A paid project's price; `null` = the platform default. One price change a day. */
   price?: Price | null;
   trialSale?: boolean;
+  /** `latest`: from now on only the newest version is sold, earlier ones read free. Refused while another
+   * operator's records are in the project; there is no way back. */
+  access?: "latest";
 }
 /** A project as `projects.update` returns it (with the price state when price or trialSale was given). */
 export type UpdatedProject = Pick<Project, "slug" | "title" | "status" | "access" | "visibility"> & { readme: string; tags: string[] } & Partial<PriceState>;
@@ -596,7 +599,7 @@ export interface DatasetListing {
   kind: "dataset";
   slug: string;
   status: string;
-  access: "public" | "paid";
+  access: "public" | "paid" | "latest";
   visibility: "public" | "private";
   price?: string;
   priceMicro?: number;
@@ -951,7 +954,7 @@ export class Witan {
     this.fetchImpl = (input, init) => f(input, init);
     this.retries = opts.retries ?? 2;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
-    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.17.3";
+    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.18.0";
     this.onDeprecation = opts.onDeprecation ?? ((n) => console.warn(n.message));
     this.projects = new Projects(this);
     this.community = new Community(this);
