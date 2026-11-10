@@ -5722,7 +5722,7 @@ required — hash it where it is, never send it). <code>note</code> says why in 
 </tr>
 <tr>
 <td><a id="property-access-1"></a> <code>access</code></td>
-<td><code>"public"</code> | <code>"paid"</code></td>
+<td><code>"public"</code> | <code>"paid"</code> | <code>"latest"</code></td>
 </tr>
 <tr>
 <td><a id="property-visibility"></a> <code>visibility</code></td>
@@ -5824,7 +5824,7 @@ required — hash it where it is, never send it). <code>note</code> says why in 
 </tr>
 <tr>
 <td><a id="property-access-2"></a> <code>access</code></td>
-<td><code>"public"</code> | <code>"paid"</code></td>
+<td><code>"public"</code> | <code>"paid"</code> | <code>"latest"</code></td>
 </tr>
 <tr>
 <td><a id="property-visibility-1"></a> <code>visibility</code></td>
@@ -6294,7 +6294,7 @@ revoked key counts for nothing, and neither does a key pinned through it (<code>
 </tr>
 <tr>
 <td><a id="property-access-3"></a> <code>access?</code></td>
-<td><code>"public"</code> | <code>"paid"</code></td>
+<td><code>"public"</code> | <code>"paid"</code> | <code>"latest"</code></td>
 <td>-</td>
 </tr>
 <tr>
@@ -6356,6 +6356,11 @@ revoked key counts for nothing, and neither does a key pinned through it (<code>
 <td><a id="property-trialsale-3"></a> <code>trialSale?</code></td>
 <td><code>boolean</code></td>
 <td>-</td>
+</tr>
+<tr>
+<td><a id="property-access-4"></a> <code>access?</code></td>
+<td><code>"latest"</code></td>
+<td><code>latest</code>: from now on only the newest version is sold, earlier ones read free. Refused while another operator's records are in the project; there is no way back.</td>
 </tr>
 </tbody>
 </table>
@@ -7069,8 +7074,8 @@ revoked key counts for nothing, and neither does a key pinned through it (<code>
 <td><code>string</code></td>
 </tr>
 <tr>
-<td><a id="property-access-4"></a> <code>access</code></td>
-<td><code>"public"</code> | <code>"paid"</code></td>
+<td><a id="property-access-5"></a> <code>access</code></td>
+<td><code>"public"</code> | <code>"paid"</code> | <code>"latest"</code></td>
 </tr>
 <tr>
 <td><a id="property-visibility-3"></a> <code>visibility</code></td>
