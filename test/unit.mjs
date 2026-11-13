@@ -4,7 +4,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  LICENSES, PaymentRequiredError, SignatureError, Witan, WitanError, defaultPayUrl, deprecationNotice, endorsementStatement, signedStatement, updatePinnedKeys, verifyManifest,
+  ACK_KEY, ACK_TYPES, LICENSES, PaymentRequiredError, SignatureError, TermsAckError, Witan, WitanError, ackDomain, ackItem, ackStatement, defaultPayUrl, deprecationNotice,
+  endorsementStatement, signedStatement, updatePinnedKeys, verifyManifest, witanTermsAck,
 } from "../dist/index.js";
 
 const BASE = "http://api.test";
@@ -903,4 +904,173 @@ test("revise posts only what is given and checks the license before sending", as
   assert.equal(r.version, 2);
   assert.deepEqual(JSON.parse(calls[0].body), { body: "b".repeat(60), title: "Redis 7.4, again", license: "CC-BY-4.0" });
   assert.equal(new Headers(calls[0].headers).get("authorization"), "Bearer km_test");
+});
+
+// ---- the terms acknowledgement (witan-terms-ack) for an x402 client the caller brings ----------
+// test/ack-signature.mjs signs with a real key and recovers it with pay/src/ack.ts's types.
+const TERMS = "2026-11-30";
+const SIG = "0x" + "ab".repeat(65);
+const PAYMENT_NONCE = "0x" + "12".repeat(32);
+const ackInfo = (over = {}) => ({
+  version: "1", termsVersion: TERMS, termsHash: "0x" + "cd".repeat(32), legalUrl: "https://witan.markets/legal/terms-summary",
+  item: "unit:u-1", price: "100000", payTo: "0x" + "22".repeat(20), network: "eip155:84532", nonce: "0x" + "ef".repeat(32),
+  expiry: Math.floor(Date.now() / 1000) + 600, required: false, ...over,
+});
+const ackRequired = (info) => ({
+  x402Version: 2, resource: { url: "https://witan.markets/paid/knowledge?id=u-1" }, accepts: [],
+  ...(info === undefined ? {} : { extensions: { [ACK_KEY]: { info, schema: { type: "object" } }, other: { info: { a: 1 } } } }),
+});
+const ackPayload = (over = {}) => ({
+  x402Version: 2, accepted: { scheme: "exact", network: "eip155:84532", amount: "100000" },
+  payload: { signature: "0x" + "99".repeat(65), authorization: { from: "0x" + "11".repeat(20), to: "0x" + "22".repeat(20), value: "100000", nonce: PAYMENT_NONCE, ...over } },
+  extensions: { kept: { info: { b: 2 } } },
+});
+function fakeSigner() {
+  const calls = [];
+  return { calls, address: "0x" + "11".repeat(20), signTypedData: async (args) => { calls.push(args); return SIG; } };
+}
+const ackExt = (signer, opts = {}) => witanTermsAck({ signer, item: ackItem("/paid/knowledge", { id: "u-1" }), acceptTerms: TERMS, ...opts });
+
+test("terms ack: the statement, types and domain are pay's, and ackItem names what a path sells", () => {
+  assert.equal(ackStatement(TERMS), `I have read the WITAN terms (version ${TERMS}) and the key terms of this purchase, and I agree to them.`);
+  assert.equal(ACK_KEY, "witan-terms-ack");
+  assert.deepEqual(ACK_TYPES.TermsAck.map((f) => `${f.name}:${f.type}`), [
+    "statement:string", "termsVersion:string", "termsHash:bytes32", "item:string", "price:uint256", "payTo:address", "nonce:bytes32", "expiry:uint256", "payment:bytes32"]);
+  assert.deepEqual(ackDomain(84532), { name: "WITAN Terms Acknowledgement", version: "1", chainId: 84532 });
+  assert.equal(ackItem("/paid/knowledge", { id: "u-1" }), "unit:u-1");
+  assert.equal(ackItem("/paid/knowledge", {}), "");
+  assert.equal(ackItem("/paid/dataset", { slug: "paid-one", version: 3 }), "dataset:paid-one@3");
+  assert.equal(ackItem("/paid/dataset", { slug: "paid-one", version: "3" }), "dataset:paid-one@3");
+  assert.equal(ackItem("/paid/dataset", { slug: "paid-one", version: null }), "dataset:paid-one");
+  assert.equal(ackItem("/paid/dataset", { slug: "paid-one", version: "03" }), "dataset:paid-one");
+  assert.equal(ackItem("/paid/dataset", { version: 3 }), "");
+  assert.equal(ackItem("/paid/credits", { operator: "op-1" }), "");
+});
+
+test("terms ack: naming the terms version signs it, binds it to the payment and keeps everything else", async () => {
+  const signer = fakeSigner();
+  const ext = ackExt(signer);
+  assert.equal(ext.key, "witan-terms-ack");
+  const info = ackInfo({ required: true });
+  const required = ackRequired(info);
+  const payload = ackPayload();
+  const before = JSON.stringify({ required, payload });
+  const out = await ext.enrichPaymentPayload(payload, required);
+  assert.equal(JSON.stringify({ required, payload }), before, "the inputs are not changed");
+  assert.notEqual(out, payload);
+  assert.deepEqual(out.extensions.kept, { info: { b: 2 } });
+  assert.deepEqual(out.extensions[ACK_KEY], { info: { ...info, signer: signer.address, signature: SIG }, schema: { type: "object" } });
+  assert.deepEqual(out.payload, payload.payload);
+  assert.equal(signer.calls.length, 1);
+  const [args] = signer.calls;
+  assert.deepEqual(args.domain, { name: "WITAN Terms Acknowledgement", version: "1", chainId: 84532 });
+  assert.equal(args.types, ACK_TYPES);
+  assert.equal(args.primaryType, "TermsAck");
+  assert.deepEqual(args.message, {
+    statement: ackStatement(TERMS), termsVersion: TERMS, termsHash: info.termsHash, item: "unit:u-1", price: 100000n,
+    payTo: info.payTo, nonce: info.nonce, expiry: BigInt(info.expiry), payment: PAYMENT_NONCE,
+  });
+  // a payload without extensions of its own gets just this one
+  const bare = ackPayload();
+  delete bare.extensions;
+  assert.deepEqual(Object.keys((await ext.enrichPaymentPayload(bare, required)).extensions), [ACK_KEY]);
+});
+
+test("terms ack: nothing is signed when not asked, nor when no version is named and it is not required", async () => {
+  const signer = fakeSigner();
+  const payload = ackPayload();
+  assert.equal(await ackExt(signer).enrichPaymentPayload(payload, ackRequired(undefined)), payload);
+  assert.equal(await ackExt(signer).enrichPaymentPayload(payload, { extensions: { [ACK_KEY]: { schema: {} } } }), payload);
+  const saved = process.env.WITAN_ACCEPT_TERMS;
+  delete process.env.WITAN_ACCEPT_TERMS;
+  try {
+    assert.equal(await ackExt(signer, { acceptTerms: undefined }).enrichPaymentPayload(payload, ackRequired(ackInfo())), payload);
+    assert.equal(await ackExt(signer, { acceptTerms: "" }).enrichPaymentPayload(payload, ackRequired(ackInfo())), payload);
+    process.env.WITAN_ACCEPT_TERMS = ` ${TERMS} `; // the environment names it
+    const out = await ackExt(signer, { acceptTerms: undefined }).enrichPaymentPayload(payload, ackRequired(ackInfo()));
+    assert.equal(out.extensions[ACK_KEY].info.signature, SIG);
+  } finally {
+    if (saved === undefined) delete process.env.WITAN_ACCEPT_TERMS;
+    else process.env.WITAN_ACCEPT_TERMS = saved;
+  }
+  assert.equal(signer.calls.length, 1);
+});
+
+test("terms ack: a required acknowledgement with no version named is refused before paying", async () => {
+  const signer = fakeSigner();
+  const saved = process.env.WITAN_ACCEPT_TERMS;
+  delete process.env.WITAN_ACCEPT_TERMS;
+  try {
+    await assert.rejects(ackExt(signer, { acceptTerms: undefined }).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ required: true }))), (e) =>
+      e instanceof TermsAckError && e instanceof PaymentRequiredError && e instanceof WitanError && e.status === 402 && e.code === "ack_missing"
+      && e.message.includes(`acceptTerms: "${TERMS}"`) && e.message.includes("https://witan.markets/legal/terms-summary")
+      && e.message.endsWith("— nothing was sent or charged"));
+    // the link is the 402's only on the site's origin
+    await assert.rejects(ackExt(signer, { acceptTerms: "" }).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ required: true, legalUrl: "https://evil.example/terms" }))), (e) =>
+      e.code === "ack_missing" && !e.message.includes("evil.example") && e.message.includes("https://witan.markets/legal/terms-summary"));
+    await assert.rejects(ackExt(signer, { acceptTerms: "", site: "http://api.test" }).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ required: true, legalUrl: "http://api.test/legal/terms" }))), (e) =>
+      e.message.includes("read http://api.test/legal/terms,"));
+    await assert.rejects(ackExt(signer, { acceptTerms: "", site: "http://api.test" }).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ required: true, legalUrl: `http://api.test/${"x".repeat(200)}` }))), (e) =>
+      e.message.includes("read http://api.test/legal/terms-summary,"));
+  } finally {
+    if (saved !== undefined) process.env.WITAN_ACCEPT_TERMS = saved;
+  }
+  assert.equal(signer.calls.length, 0);
+});
+
+test("terms ack: another terms version than the one named is not signed", async () => {
+  const signer = fakeSigner();
+  for (const required of [true, false]) {
+    await assert.rejects(ackExt(signer).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ termsVersion: "2027-01-10", required }))), (e) =>
+      e instanceof TermsAckError && e.code === "ack_terms_version" && e.message.includes("asks to acknowledge terms 2027-01-10, not 2026-11-30")
+      && e.message.endsWith("— nothing was sent or charged"));
+  }
+  assert.equal(signer.calls.length, 0);
+});
+
+test("terms ack: an acknowledgement that is not for this purchase is not signed", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  const cases = [
+    [{ item: "unit:other" }, {}, 'names "unit:other", not "unit:u-1"'],
+    [{ item: "" }, {}, 'not "unit:u-1"'],
+    [{ price: "90000" }, {}, "price"],
+    [{ price: "0.10" }, {}, "price"],
+    [{ price: 100000 }, {}, "price"],
+    [{}, { value: "90000" }, "price"],
+    [{ payTo: "0x" + "33".repeat(20) }, {}, "payee"],
+    [{ payTo: "0x22" }, { to: "0x22" }, "payee"],
+    [{ network: "eip155:8453" }, {}, "network"],
+    [{ network: "solana:devnet" }, {}, "network"],
+    [{}, { from: "0x" + "44".repeat(20) }, "signer is not the wallet this payment is from"],
+    [{}, { from: undefined }, "signer is not the wallet this payment is from"],
+    [{ expiry: now - 5 }, {}, "expired"],
+    [{ expiry: "soon" }, {}, "expired"],
+    [{ expiry: now + 600.5 }, {}, "expired"],
+    [{ termsHash: "0x1234" }, {}, "terms hash"],
+    [{ nonce: "nonce" }, {}, "nonce is malformed"],
+    [{ termsVersion: "<script>" }, {}, "terms version is not one"],
+    [{}, { nonce: "0x1234" }, "no EIP-3009 authorization"],
+  ];
+  for (const [over, auth, why] of cases) {
+    const signer = fakeSigner();
+    await assert.rejects(ackExt(signer).enrichPaymentPayload(ackPayload(auth), ackRequired(ackInfo(over))), (e) =>
+      e instanceof TermsAckError && e.code === "ack_mismatch" && e.message.includes(why)
+      && e.message.startsWith("refusing to sign the terms acknowledgement this 402 asks for:") && e.message.endsWith("— nothing was sent or charged"),
+    `${JSON.stringify(over)} ${JSON.stringify(auth)}`);
+    assert.equal(signer.calls.length, 0);
+  }
+  // a payment with no authorization at all, and one bound to another item than the one being bought
+  const signer = fakeSigner();
+  const noAuth = { ...ackPayload(), payload: { transaction: "0x" } };
+  await assert.rejects(ackExt(signer).enrichPaymentPayload(noAuth, ackRequired(ackInfo())), (e) => e.code === "ack_mismatch" && /no EIP-3009/.test(e.message));
+  await assert.rejects(ackExt(signer, { item: "" }).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo())), (e) => e.code === "ack_mismatch");
+  // a malformed terms version is refused even with nothing named (as Python's TermsAck does)
+  await assert.rejects(ackExt(signer, { acceptTerms: "" }).enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ termsVersion: 7 }))), (e) => e.code === "ack_mismatch");
+  // the payee is compared without letter case, the price as a number
+  const mixed = await ackExt(signer).enrichPaymentPayload(ackPayload({ from: "0x" + "11".repeat(20).toUpperCase(), to: "0x" + "2A".repeat(20), value: "0100000" }), ackRequired(ackInfo({ payTo: "0x" + "2a".repeat(20) })));
+  assert.equal(mixed.extensions[ACK_KEY].info.signature, SIG);
+  const ds = await ackExt(signer, { item: ackItem("/paid/dataset", { slug: "paid-one", version: 3 }) })
+    .enrichPaymentPayload(ackPayload(), ackRequired(ackInfo({ item: "dataset:paid-one@3" })));
+  assert.equal(ds.extensions[ACK_KEY].info.item, "dataset:paid-one@3");
+  assert.equal(signer.calls.length, 2);
 });

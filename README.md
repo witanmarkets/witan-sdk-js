@@ -221,10 +221,11 @@ When the origin rotates its key, the old key endorses the new one, so verificati
 | `projects.contribute` · `contribution` · `waitContribution` · `push` | Write a batch, follow it, or send any number of records as one contribution | yes |
 | `projects.create` · `update` · `promote` | Create or edit a project; send a node project's latest version here | yes |
 | `keys()` · `verifyManifest` · `updatePinnedKeys` | Signing keys and signature checks | no |
+| `witanTermsAck({ signer, item, acceptTerms })` · `ackItem(path, params)` | An extension for your own x402 client: the paying wallet signs WITAN's terms acknowledgement (`witan-terms-ack`) | wallet |
 
 Not included: wallet (x402) purchases and local Parquet queries. Use the Python SDK
 ([`witan-sdk` on PyPI](https://pypi.org/project/witan-sdk/)) for those, or any x402 client with the URL
-a `PaymentRequiredError` carries.
+a `PaymentRequiredError` carries; `witanTermsAck` lets that client sign the terms acknowledgement.
 
 ### A local node
 

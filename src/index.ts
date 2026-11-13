@@ -954,7 +954,7 @@ export class Witan {
     this.fetchImpl = (input, init) => f(input, init);
     this.retries = opts.retries ?? 2;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
-    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.18.0";
+    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.19.0";
     this.onDeprecation = opts.onDeprecation ?? ((n) => console.warn(n.message));
     this.projects = new Projects(this);
     this.community = new Community(this);
@@ -1909,6 +1909,199 @@ function checkedTime(issued: unknown, build: (time: number) => string): number {
     throw new WitanError(0, "the pay service asked the wallet to sign something other than WITAN's statement for this origin and wallet — refusing to sign (is payUrl the service's public URL?)");
   }
   return time;
+}
+
+// ---- the terms acknowledgement a 402 may ask for (pay/src/ack.ts), for an x402 client you bring ----
+
+/** The x402 extension a 402 asks for the terms acknowledgement in. */
+export const ACK_KEY = "witan-terms-ack";
+/** The EIP-712 types of the acknowledgement — pay/src/ack.ts, field for field. */
+export const ACK_TYPES = {
+  TermsAck: [
+    { name: "statement", type: "string" },
+    { name: "termsVersion", type: "string" },
+    { name: "termsHash", type: "bytes32" },
+    { name: "item", type: "string" },
+    { name: "price", type: "uint256" },
+    { name: "payTo", type: "address" },
+    { name: "nonce", type: "bytes32" },
+    { name: "expiry", type: "uint256" },
+    { name: "payment", type: "bytes32" },
+  ],
+} as const;
+/** The EIP-712 domain of the acknowledgement on a chain (the `eip155:<chainId>` being paid on). */
+export const ackDomain = (chainId: number) => ({ name: "WITAN Terms Acknowledgement", version: "1", chainId });
+/** The sentence the wallet signs with the acknowledgement — pay/src/ack.ts, character for character.
+ *  Built here, never taken from a 402. */
+export const ackStatement = (termsVersion: string): string =>
+  `I have read the WITAN terms (version ${termsVersion}) and the key terms of this purchase, and I agree to them.`;
+
+const TERMS_SUMMARY_PATH = "/legal/terms-summary";
+const HEX32 = /^0x[0-9a-fA-F]{64}$/;
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const ATOMIC = /^[0-9]+$/;
+const TERMS_VERSION = /^[0-9A-Za-z][0-9A-Za-z._-]{0,39}$/;
+const DATASET_VERSION = /^[1-9][0-9]{0,8}$/;
+const EVM_NETWORK = /^eip155:([1-9][0-9]{0,17})$/;
+
+/**
+ * What a paid path sells, as the pay service names it in the acknowledgement: `unit:<id>` for
+ * `/paid/knowledge`, `dataset:<slug>` or `dataset:<slug>@<version>` for `/paid/dataset`. `""` for
+ * anything else (credit packs, which ask for none).
+ */
+export function ackItem(path: string, params: Record<string, string | number | null | undefined>): string {
+  const q = (name: string) => (params[name] === undefined || params[name] === null ? "" : String(params[name]));
+  if (path === "/paid/knowledge") return q("id") ? `unit:${q("id")}` : "";
+  if (path === "/paid/dataset" && q("slug")) {
+    return DATASET_VERSION.test(q("version")) ? `dataset:${q("slug")}@${q("version")}` : `dataset:${q("slug")}`;
+  }
+  return "";
+}
+
+/** What the wallet signs: `TermsAck` with uint256 as bigint and bytes32 / address as 0x strings, as viem takes them. */
+export interface TermsAckMessage {
+  statement: string;
+  termsVersion: string;
+  termsHash: `0x${string}`;
+  item: string;
+  price: bigint;
+  payTo: `0x${string}`;
+  nonce: `0x${string}`;
+  expiry: bigint;
+  payment: `0x${string}`;
+}
+/** The paying wallet. A viem local account is one as it is; for ethers, see the guide (Paying). */
+export interface TermsAckSigner {
+  address: string;
+  signTypedData(args: {
+    domain: { name: string; version: string; chainId: number };
+    types: typeof ACK_TYPES;
+    primaryType: "TermsAck";
+    message: TermsAckMessage;
+  }): Promise<string>;
+}
+export interface TermsAckOptions {
+  /** The wallet that pays: the acknowledgement must be signed by the payer. */
+  signer: TermsAckSigner;
+  /** What is being bought, from `ackItem(path, params)`. The 402 must name the same item. */
+  item: string;
+  /** The terms version you read (`/legal/terms-summary`). Falls back to WITAN_ACCEPT_TERMS; empty, nothing is signed. */
+  acceptTerms?: string;
+  /** The WITAN origin, only for the terms link in refusals. Default https://witan.markets. */
+  site?: string;
+}
+/** The parts of an x402 v2 PaymentPayload the acknowledgement reads (structural; no x402 import). */
+export interface X402PaymentPayloadLike {
+  payload: unknown;
+  accepted: { network: string };
+  extensions?: Record<string, unknown>;
+}
+/** The parts of an x402 v2 PaymentRequired the acknowledgement reads. */
+export interface X402PaymentRequiredLike {
+  extensions?: Record<string, unknown>;
+}
+/** An x402 client extension: pass it to `x402Client.registerExtension(...)` (`@x402/core`). */
+export interface TermsAckExtension {
+  key: typeof ACK_KEY;
+  enrichPaymentPayload<P extends X402PaymentPayloadLike>(paymentPayload: P, paymentRequired: X402PaymentRequiredLike): Promise<P & { extensions?: Record<string, unknown> }>;
+}
+
+/** A terms acknowledgement this SDK will not sign, raised before the payment is sent. `code`:
+ *  `ack_missing` (required, no terms version named), `ack_terms_version` (the 402 asks for another
+ *  version), `ack_mismatch` (the 402 is not for this purchase). */
+export class TermsAckError extends PaymentRequiredError {
+  readonly code: "ack_missing" | "ack_terms_version" | "ack_mismatch";
+  constructor(code: TermsAckError["code"], message: string) {
+    super({ error: message, code });
+    this.name = "TermsAckError";
+    this.code = code;
+  }
+}
+
+/** Where the key terms are read: the 402's own link only when it is on `site`'s origin, else that origin's summary page. */
+function termsSummaryUrl(legalUrl: unknown, site: string): string {
+  const origin = originOf(site) ?? "";
+  if (typeof legalUrl === "string" && origin && originOf(legalUrl) === origin && legalUrl.length <= 200) return legalUrl;
+  return origin + TERMS_SUMMARY_PATH;
+}
+const ackMismatch = (why: string) =>
+  new TermsAckError("ack_mismatch", `refusing to sign the terms acknowledgement this 402 asks for: ${why} — nothing was sent or charged`);
+const isHex32 = (v: unknown): v is `0x${string}` => typeof v === "string" && HEX32.test(v);
+
+/**
+ * The client side of the x402 extension `witan-terms-ack`, for an x402 v2 client you bring
+ * (`client.registerExtension(witanTermsAck({ signer, item, acceptTerms }))`). This SDK still makes no payment.
+ *
+ * The 402 carries what to acknowledge (terms version and hash, the item, its price, who is paid, a nonce and an
+ * expiry). When `acceptTerms` names that terms version, the paying wallet signs an EIP-712 `TermsAck` over those
+ * values and this payment's EIP-3009 nonce, and the signature travels with the payment. Without `acceptTerms`
+ * nothing is signed: the purchase goes ahead unsigned where the service allows that (testnet) and is refused
+ * here, before anything is sent, where it does not. The values are held to the purchase being made before
+ * signing — a 402 cannot get an acknowledgement for another item, price, payee or terms version.
+ */
+export function witanTermsAck(opts: TermsAckOptions): TermsAckExtension {
+  const { signer, item } = opts;
+  const acceptTerms = String(opts.acceptTerms ?? env("WITAN_ACCEPT_TERMS") ?? "").trim();
+  const site = opts.site ?? DEFAULT_BASE_URL;
+  return {
+    key: ACK_KEY,
+    async enrichPaymentPayload<P extends X402PaymentPayloadLike>(payload: P, required: X402PaymentRequiredLike): Promise<P & { extensions?: Record<string, unknown> }> {
+      const entry = required?.extensions?.[ACK_KEY];
+      const info = entry && typeof entry === "object" ? (entry as { info?: unknown }).info : undefined;
+      if (!info || typeof info !== "object" || Array.isArray(info)) return payload; // this 402 asks for no acknowledgement
+      const i = info as Record<string, unknown>;
+      const version = i.termsVersion;
+      if (typeof version !== "string" || !TERMS_VERSION.test(version)) throw ackMismatch("its terms version is not one");
+      const where = termsSummaryUrl(i.legalUrl, site);
+      if (!acceptTerms) {
+        if (i.required !== true) return payload;
+        throw new TermsAckError("ack_missing",
+          `this purchase needs a signed acknowledgement of the WITAN terms (version ${version}): read ${where}, ` +
+          `then pass acceptTerms: "${version}" (or set WITAN_ACCEPT_TERMS) — nothing was sent or charged`);
+      }
+      if (version !== acceptTerms) {
+        throw new TermsAckError("ack_terms_version",
+          `the 402 asks to acknowledge terms ${version}, not ${acceptTerms}: read ${where}, then pass ` +
+          `acceptTerms: "${version}" — nothing was sent or charged`);
+      }
+
+      const inner = payload?.payload;
+      const authorization = inner && typeof inner === "object" ? (inner as { authorization?: unknown }).authorization : undefined;
+      const a = (authorization && typeof authorization === "object" ? authorization : {}) as Record<string, unknown>;
+      if (!authorization || typeof authorization !== "object" || !isHex32(a.nonce)) {
+        throw ackMismatch("this payment carries no EIP-3009 authorization to bind it to");
+      }
+      const network = EVM_NETWORK.exec(typeof i.network === "string" ? i.network : "");
+      const { price, expiry, payTo } = i;
+      const value = a.value === undefined ? "" : String(a.value);
+      if (!item || i.item !== item) throw ackMismatch(`it names ${JSON.stringify(String(i.item).slice(0, 80))}, not ${JSON.stringify(item)}`);
+      if (typeof price !== "string" || !ATOMIC.test(price) || !ATOMIC.test(value) || BigInt(price) !== BigInt(value)) {
+        throw ackMismatch("its price is not the amount being paid");
+      }
+      if (typeof payTo !== "string" || !ADDRESS.test(payTo) || payTo.toLowerCase() !== String(a.to ?? "").toLowerCase()) {
+        throw ackMismatch("its payee is not the address being paid");
+      }
+      if (!network || i.network !== String(payload.accepted?.network)) throw ackMismatch("its network is not the one being paid on");
+      // the pay service takes an acknowledgement only from the payer (pay/src/ack.ts: signer == authorization.from)
+      if (typeof a.from !== "string" || a.from.toLowerCase() !== String(signer.address).toLowerCase()) {
+        throw ackMismatch("the signer is not the wallet this payment is from");
+      }
+      if (typeof expiry !== "number" || !Number.isInteger(expiry) || expiry <= Date.now() / 1000) throw ackMismatch("it has expired — ask again");
+      if (!isHex32(i.termsHash) || !isHex32(i.nonce)) throw ackMismatch("its terms hash or nonce is malformed");
+
+      const signature = await signer.signTypedData({
+        domain: ackDomain(Number(network[1])),
+        types: ACK_TYPES,
+        primaryType: "TermsAck",
+        message: {
+          statement: ackStatement(version), termsVersion: version, termsHash: i.termsHash, item, price: BigInt(price),
+          payTo: payTo as `0x${string}`, nonce: i.nonce, expiry: BigInt(expiry), payment: a.nonce,
+        },
+      });
+      const mine = { ...(entry as Record<string, unknown>), info: { ...i, signer: signer.address, signature } };
+      return { ...payload, extensions: { ...(payload.extensions ?? {}), [ACK_KEY]: mine } };
+    },
+  };
 }
 
 function webCrypto(): SubtleCrypto {

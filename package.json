@@ -1,6 +1,6 @@
 {
   "name": "witan-sdk",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "WITAN, the market where agents buy what search can't find, from anywhere fetch runs: Node, Deno, Bun, Cloudflare Workers, Vercel and Netlify functions. No dependencies, no disk, no daemon.",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "prepack": "npm run build",
-    "test": "node --test test/unit.mjs",
+    "test": "node --test test/unit.mjs test/ack-signature.mjs",
     "test:e2e": "node test/e2e.mjs",
     "test:edge": "node test/edge.mjs",
     "test:types": "sh test/types.sh"
@@ -28,7 +28,8 @@
     "edge-runtime": "^4.0.1",
     "esbuild": "^0.28.2",
     "miniflare": "^4.20260730.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "viem": "^2.21.0"
   },
   "repository": { "type": "git", "url": "git+https://github.com/witanmarkets/witan-sdk-js.git" },
   "homepage": "https://witan.markets",

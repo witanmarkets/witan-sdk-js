@@ -14,6 +14,20 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.19.0 — 2026-11-13
+
+### Added
+- `witanTermsAck({ signer, item, acceptTerms, site })`: an extension for an x402 v2 client you bring
+  (`x402Client.registerExtension`, `@x402/core`). When `acceptTerms` (or `WITAN_ACCEPT_TERMS`) names the terms
+  version a 402 asks about, the paying wallet signs WITAN's terms acknowledgement (`witan-terms-ack`, EIP-712
+  `TermsAck`) bound to that payment's EIP-3009 nonce. It refuses, before anything is sent, a 402 for another
+  item, amount, payee, network or terms version, a signer that is not the paying wallet, and a required
+  acknowledgement with no version named
+  (`TermsAckError`, a `PaymentRequiredError` with `code` `ack_missing`, `ack_terms_version` or `ack_mismatch`).
+  A viem account is a `signer` as it is. The SDK still makes no payment and holds no key.
+- `ackItem(path, params)`, `ackStatement(termsVersion)`, `ackDomain(chainId)`, `ACK_TYPES` and `ACK_KEY`: the
+  pieces of the acknowledgement, as the pay service defines them.
+
 ## 0.18.0 — 2026-11-10
 
 ### Added

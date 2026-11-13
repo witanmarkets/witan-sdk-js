@@ -15,11 +15,53 @@ WITAN charges for paid dataset versions and for storage or egress past the free 
 | Dispute a payment | not available | the Python SDK's `dispute(transaction, reason)` |
 
 !!! note "x402 payments are not in the JavaScript SDK"
-    `witan-sdk` never holds a wallet key and never signs a payment. To pay from a wallet, use the Python SDK (`pip install "witan-sdk[x402]"`, then `buy`, `buy_dataset` and `buy_credits`), or any x402 client against the URLs that errors and `credits()` carry.
+    `witan-sdk` never holds a wallet key and never signs a payment. To pay from a wallet, use the Python SDK (`pip install "witan-sdk[x402]"`, then `buy`, `buy_dataset` and `buy_credits`), or any x402 client against the URLs that errors and `credits()` carry; `witanTermsAck` lets that client sign WITAN's terms acknowledgement (below).
 
 ## Getting test USDC
 
 The public service runs on Base Sepolia. Get test USDC for a wallet from Circle's faucet, https://faucet.circle.com (choose Base Sepolia). A buyer needs no ETH: it only signs the payment authorization, and the facilitator submits the transaction and pays its gas.
+
+## Signing the terms acknowledgement with your own x402 client
+
+A 402 for a unit or a dataset version carries the x402 extension `witan-terms-ack`: the terms version and hash, the item, the amount, who is paid, a nonce and an expiry. The paying wallet can sign, with that payment, that it read those terms (an EIP-712 `TermsAck` bound to the payment's EIP-3009 nonce). On the testnet a payment without the signature is still taken; on mainnet a signed acknowledgement will be required, and a payment without one is refused before it is charged.
+
+`witanTermsAck({ signer, item, acceptTerms })` is that signature as an extension for an x402 v2 client (`@x402/core`'s `registerExtension`). Read the terms first: the summary is at https://witan.markets/legal/terms-summary, and the version a purchase asks about is the 402's `extensions["witan-terms-ack"].info.termsVersion`. Pass that version as `acceptTerms` (or set `WITAN_ACCEPT_TERMS`); without it nothing is signed.
+
+```ts
+import { wrapFetchWithPayment } from "@x402/fetch";
+import { x402Client } from "@x402/core/client";
+import { ExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
+import { ackItem, witanTermsAck } from "witan-sdk";
+
+const account = privateKeyToAccount(process.env.WALLET_PRIVATE_KEY as `0x${string}`);   // your own variable
+const id = "5e5fc8dd-af67-4f34-839b-b366ef05d43d";                                       // the unit to buy
+
+const client = new x402Client();
+client.register("eip155:*", new ExactEvmScheme(account));
+client.registerExtension(witanTermsAck({
+  signer: account,                                  // the wallet that pays signs the acknowledgement
+  item: ackItem("/paid/knowledge", { id }),         // "unit:<id>"; ackItem("/paid/dataset", { slug, version }) for a dataset
+  acceptTerms: "<the terms version you read>",
+}));
+
+const pay = wrapFetchWithPayment(fetch, client);
+const res = await pay(`https://witan.markets/paid/knowledge?id=${encodeURIComponent(id)}`);
+```
+
+Before it signs, the extension holds the 402 to the purchase: the item must be `item`, the amount and payee those of the payment, the network the one being paid on, `signer` the wallet the payment is from, and the acknowledgement not expired. Otherwise, and when the 402 asks for another terms version or requires an acknowledgement and no version was named, it throws `TermsAckError` (a `PaymentRequiredError` whose `code` is `ack_mismatch`, `ack_terms_version` or `ack_missing`) and nothing is sent or charged.
+
+A viem account is a `signer` as it is. With ethers, adapt its `signTypedData`:
+
+```ts
+import type { TermsAckSigner } from "witan-sdk";
+
+// wallet: an ethers v6 Wallet or Signer
+const signer: TermsAckSigner = {
+  address: wallet.address,
+  signTypedData: ({ domain, types, message }) => wallet.signTypedData(domain, { TermsAck: [...types.TermsAck] }, message),
+};
+```
 
 ## Quota and credits
 

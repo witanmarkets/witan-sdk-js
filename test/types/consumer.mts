@@ -32,3 +32,18 @@ export async function earningsTypes(): Promise<number> {
   const wrong: NextPayout = "paid";
   return e.payableMicro + (e.addressHoldUntil === null ? 0 : 1) + next.length + wrong.length;
 }
+
+// the terms acknowledgement (0.19.0): an x402 client extension, for a signer shaped like a viem account
+import { ackItem, witanTermsAck, TermsAckError, type TermsAckSigner } from "../../dist/index.js";
+interface X402Payload { x402Version: number; accepted: { scheme: string; network: string; amount: string }; payload: Record<string, unknown>; extensions?: Record<string, unknown> }
+interface X402Required { x402Version: number; accepts: unknown[]; extensions?: Record<string, unknown> }
+interface X402ClientExtension { key: string; enrichPaymentPayload?: (p: X402Payload, r: X402Required) => Promise<X402Payload> }
+export function ackTypes(signer: TermsAckSigner): X402ClientExtension {
+  const ext: X402ClientExtension = witanTermsAck({ signer, item: ackItem("/paid/dataset", { slug: "s", version: 3 }), acceptTerms: "2026-11-30" });
+  // @ts-expect-error the signer is required
+  witanTermsAck({ item: "unit:u-1" });
+  const e = new TermsAckError("ack_missing", "m");
+  // @ts-expect-error not a refusal code
+  const wrong: TermsAckError["code"] = "ack_unsigned";
+  return e.code.length + String(wrong).length > 0 ? ext : ext;
+}
