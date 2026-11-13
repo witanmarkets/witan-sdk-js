@@ -14,6 +14,29 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## 0.20.0 — 2026-11-13
+
+### Added
+- `buy(id, { signer, acceptTerms, maxPrice, networks })`, `buyDataset(slug, { version, signer, ... })` and
+  `buyCredits({ operatorId, signer, maxPrice, networks })`: purchases over x402 (v2, scheme `exact`, an EIP-3009
+  `TransferWithAuthorization` on USDC) from a wallet, with no API key. The SDK takes no key and still has no
+  dependency: `signer` (`WalletSigner`, an `address` and a `signTypedData`; a viem account is one as it is) signs
+  the payment, and the terms acknowledgement when `acceptTerms` (or `WITAN_ACCEPT_TERMS`) names the version.
+  Before anything is signed the 402 is held to the same limits as the Python SDK's `buy()`: an allowed network
+  (`networks`, else `WITAN_X402_NETWORKS`, else Base Sepolia only), that network's USDC, a price at most `maxPrice`
+  USD (else `WITAN_MAX_PRICE`, else 1.00). Otherwise it throws `PaymentRequiredError` ("refusing to pay: …") and
+  sends nothing. The paid request is sent once and never repeated; a refusal by the pay service before it charges
+  throws `PaymentRequiredError` with its `code` (`ack_…`). The answer is the pay service's JSON, with the settlement
+  (`PAYMENT-RESPONSE`: `success`, `transaction`, `network`, `payer`) under `x402`.
+- `WalletSigner`, `X402BuyOptions`, `X402Purchase`, `X402Settlement`, `TransferAuthorizationMessage`, and the
+  constants `USDC` (the USDC contract per network) and `TRANSFER_TYPES` (the EIP-3009 typed-data types).
+- `PaymentRequiredError.code`: the answer's `code`, when it has one.
+
+### Changed
+- `TermsAckMessage` is a type alias instead of an interface, so that a viem account is also a `WalletSigner`
+  (viem's `signTypedData` takes a message only with an index signature). Code that only uses the type is
+  unaffected; one that merged declarations into the interface must declare its own type.
+
 ## 0.19.0 — 2026-11-13
 
 ### Added

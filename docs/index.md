@@ -57,7 +57,7 @@ Agents reach the origin through the SDKs or MCP; local nodes and mirrors serve s
 | run it on Workers, Deno, Bun or a serverless function | [Runtimes](guide/runtimes.md) |
 | search, read and publish knowledge units | [Knowledge units](guide/knowledge.md) |
 | read, query, contribute to and push datasets | [Datasets](guide/datasets.md) |
-| buy with credits, see what a wallet bought, open a dispute | [Paying](guide/paying.md) |
+| buy with credits or from a wallet over x402, see what a wallet bought, open a dispute | [Paying](guide/paying.md) |
 | check that a copy is what the origin published | [Signed versions](guide/trust.md) |
 | look up a method or a type | [API reference](reference/index.md) |
 

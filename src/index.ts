@@ -781,17 +781,21 @@ export class WitanError extends Error {
     this.body = body;
   }
 }
-/** 402: a paid dataset (`pay` is the x402 URL, `price` the amount) or a quota exceeded (`quota`). */
+/** 402: a paid dataset (`pay` is the x402 URL, `price` the amount) or a quota exceeded (`quota`); from `buy*()`,
+ *  a payment refused before anything was sent, or (`code` `ack_…`) one the pay service refused before charging. */
 export class PaymentRequiredError extends WitanError {
   readonly price?: string;
   readonly pay?: string;
   readonly quota?: unknown;
+  /** The machine-readable reason, when the answer gives one (e.g. `ack_signature` from the pay service). */
+  readonly code?: string;
   constructor(body: Record<string, unknown>) {
     super(402, String(body.error ?? "payment required"), body);
     this.name = "PaymentRequiredError";
     if (typeof body.price === "string") this.price = body.price;
     if (typeof body.pay === "string") this.pay = body.pay;
     if (body.quota !== undefined) this.quota = body.quota;
+    if (typeof body.code === "string") this.code = body.code;
   }
 }
 /**
@@ -954,7 +958,7 @@ export class Witan {
     this.fetchImpl = (input, init) => f(input, init);
     this.retries = opts.retries ?? 2;
     this.timeoutMs = opts.timeoutMs ?? 30_000;
-    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.19.0";
+    this.userAgent = opts.userAgent ?? "witan-sdk-js/0.20.0";
     this.onDeprecation = opts.onDeprecation ?? ((n) => console.warn(n.message));
     this.projects = new Projects(this);
     this.community = new Community(this);
@@ -1270,6 +1274,99 @@ export class Witan {
   /** Where a dispute stands: `{ id, status, kind, amountMicro, transaction, reason, refundMicro, refundTx, ... }`. */
   async disputeStatus(id: string): Promise<Dispute> {
     return (await parseBody(await this.payFetch(`/disputes/${enc(id)}`))) as Dispute;
+  }
+
+  // ---------- x402 purchases from a wallet ----------
+
+  /**
+   * Buy a unit with USDC over x402, from the wallet `signer` holds — no API key needed, the payment is the
+   * auth. The SDK never sees the key: `signer` (a viem account as it is) signs an EIP-3009 transfer
+   * authorization for the exact price the pay service quotes, and the facilitator settles it on-chain. Testnet
+   * preview: Base Sepolia.
+   *
+   * Before anything is signed the 402 is held to this machine's limits: USDC on an allowed network
+   * (`networks`, else WITAN_X402_NETWORKS, else Base Sepolia only) at no more than `maxPrice` USD (else
+   * WITAN_MAX_PRICE, else 1.00), x402 v2, scheme `exact`. Anything else throws `PaymentRequiredError`
+   * ("refusing to pay: …") and nothing is signed or sent.
+   *
+   * The 402 may ask the paying wallet to acknowledge the terms (mandatory on mainnet): name the version you
+   * read as `acceptTerms` (or WITAN_ACCEPT_TERMS) and the wallet signs it for this one purchase — see
+   * `witanTermsAck`. A payment the pay service refuses before charging throws `PaymentRequiredError` with its
+   * `code` (`ack_…`). The paid request is sent once and never repeated: when it fails, check `purchases()`
+   * before buying again. Returns the pay service's JSON with the settlement under `x402`.
+   */
+  async buy(id: string, opts: X402BuyOptions): Promise<X402Purchase> {
+    return this.x402Purchase("/paid/knowledge", { id }, opts);
+  }
+  /** Buy one version of a paid dataset over x402 (the latest without `version`); see `buy()`. */
+  async buyDataset(slug: string, opts: X402BuyOptions & { version?: number }): Promise<X402Purchase> {
+    return this.x402Purchase("/paid/dataset", { slug, version: opts.version }, opts);
+  }
+  /**
+   * Top up prepaid credits by one pack over x402 (see `buy()`). The pack lands on `operatorId` — by default
+   * the operator of this API key, read from `credits()`. Returns `{ operatorId, creditedMicro, balanceMicro,
+   * paid, x402 }`. Credit packs are not sold on mainnet.
+   */
+  async buyCredits(opts: Omit<X402BuyOptions, "acceptTerms"> & { operatorId?: string }): Promise<X402Purchase> {
+    const operator = opts.operatorId ?? (await this.credits()).operatorId;
+    return this.x402Purchase("/paid/credits", { operator }, opts);
+  }
+
+  /** One x402 purchase: the unpaid 402, the limits, one signed payment sent once, the settlement. */
+  private async x402Purchase(path: string, params: Record<string, string | number | undefined>, opts: X402BuyOptions): Promise<X402Purchase> {
+    const signer = opts?.signer;
+    if (!signer || typeof signer.signTypedData !== "function" || typeof signer.address !== "string" || !ADDRESS.test(signer.address)) {
+      throw refuse("no wallet: pass signer, an object with address and signTypedData (a viem account is one)");
+    }
+    const allowed = allowedNetworks(opts.networks);
+    const cap = priceCap(opts.maxPrice);
+    const query = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== null) query.set(k, String(v));
+    const url = `${this.payUrl}${path}?${query}`;
+    const headers: Record<string, string> = { accept: "application/json", ...(this.userAgent ? { "user-agent": this.userAgent } : {}) };
+
+    const get = async (extra: Record<string, string>, paid: boolean): Promise<Response> => {
+      let res: Response;
+      try {
+        res = await this.fetchImpl(url, { method: "GET", headers: { ...headers, ...extra }, signal: timeoutSignal(PURCHASE_TIMEOUT_MS) });
+      } catch (e) {
+        const err = unreachable(this.payUrl, e, PURCHASE_TIMEOUT_MS);
+        if (!paid) throw err;
+        throw new WitanError(0, `${err.message} — the payment was sent and may have settled: check purchases() before buying again`);
+      }
+      this.noteDeprecation("GET", url, res);
+      return res;
+    };
+
+    const first = await get({}, false);
+    if (first.status !== 402) return x402Answer(first);
+    const required = decodeX402Header(first.headers.get("payment-required"));
+    if (!required) {
+      const body = await parseBody(first);
+      throw new PaymentRequiredError({ ...(body && typeof body === "object" ? body as Record<string, unknown> : {}),
+        error: "the pay service answered 402 without x402 requirements (PAYMENT-REQUIRED) — nothing was signed or sent" });
+    }
+    const accepted = chooseRequirements(required, allowed, cap);
+    let payload = await exactEvmPayload(signer, required, accepted);
+    // the same extension an x402 client you bring registers; it refuses (TermsAckError) before anything is sent
+    payload = await witanTermsAck({ signer, item: ackItem(path, params), acceptTerms: opts.acceptTerms, site: this.baseUrl })
+      .enrichPaymentPayload(payload, required as X402PaymentRequiredLike);
+
+    // sent once: a payment header never goes out a second time from here
+    const res = await get({ "PAYMENT-SIGNATURE": encodeX402Header(payload) }, true);
+    if (res.status === 402) {
+      // paid and still 402: the pay service refused before settling (pay/src/ack.ts), or the payment did not verify
+      const text = await res.text();
+      let refused: unknown;
+      try { refused = JSON.parse(text); } catch { refused = undefined; }
+      const r = refused && typeof refused === "object" && !Array.isArray(refused) ? (refused as Record<string, unknown>) : {};
+      if (typeof r.code === "string" && r.code.startsWith("ack_")) {
+        throw new PaymentRequiredError({ ...r, error: `purchase refused: ${brief(r.error) ?? r.code}` });
+      }
+      const why = decodeX402Header(res.headers.get("payment-required"))?.error;
+      throw new WitanError(402, `purchase failed: ${brief(why) ?? brief(text) ?? `402 ${res.statusText}`.trim()}`, refused ?? text.slice(0, 500));
+    }
+    return x402Answer(res);
   }
 
   /** A call to the pay service (GET, or POST with a JSON body) — no API key there; non-2xx throws like any call. */
@@ -1911,7 +2008,7 @@ function checkedTime(issued: unknown, build: (time: number) => string): number {
   return time;
 }
 
-// ---- the terms acknowledgement a 402 may ask for (pay/src/ack.ts), for an x402 client you bring ----
+// ---- the terms acknowledgement a 402 may ask for (pay/src/ack.ts): buy*() and an x402 client you bring ----
 
 /** The x402 extension a 402 asks for the terms acknowledgement in. */
 export const ACK_KEY = "witan-terms-ack";
@@ -1958,8 +2055,9 @@ export function ackItem(path: string, params: Record<string, string | number | n
   return "";
 }
 
-/** What the wallet signs: `TermsAck` with uint256 as bigint and bytes32 / address as 0x strings, as viem takes them. */
-export interface TermsAckMessage {
+/** What the wallet signs: `TermsAck` with uint256 as bigint and bytes32 / address as 0x strings, as viem takes them.
+ *  A type, not an interface: viem's `signTypedData` takes a message only with an index signature. */
+export type TermsAckMessage = {
   statement: string;
   termsVersion: string;
   termsHash: `0x${string}`;
@@ -1969,8 +2067,9 @@ export interface TermsAckMessage {
   nonce: `0x${string}`;
   expiry: bigint;
   payment: `0x${string}`;
-}
-/** The paying wallet. A viem local account is one as it is; for ethers, see the guide (Paying). */
+};
+/** The paying wallet, as the acknowledgement uses it. A viem local account is one as it is; so is a
+ *  `WalletSigner`. For ethers, see the guide (Paying). */
 export interface TermsAckSigner {
   address: string;
   signTypedData(args: {
@@ -2030,7 +2129,8 @@ const isHex32 = (v: unknown): v is `0x${string}` => typeof v === "string" && HEX
 
 /**
  * The client side of the x402 extension `witan-terms-ack`, for an x402 v2 client you bring
- * (`client.registerExtension(witanTermsAck({ signer, item, acceptTerms }))`). This SDK still makes no payment.
+ * (`client.registerExtension(witanTermsAck({ signer, item, acceptTerms }))`). `buy()`, `buyDataset()` and
+ * `buyCredits()` run it on their own payments.
  *
  * The 402 carries what to acknowledge (terms version and hash, the item, its price, who is paid, a nonce and an
  * expiry). When `acceptTerms` names that terms version, the paying wallet signs an EIP-712 `TermsAck` over those
@@ -2102,6 +2202,296 @@ export function witanTermsAck(opts: TermsAckOptions): TermsAckExtension {
       return { ...payload, extensions: { ...(payload.extensions ?? {}), [ACK_KEY]: mine } };
     },
   };
+}
+
+// ---- x402 purchases from a wallet the caller holds (x402 v2, scheme exact, EIP-3009 on USDC) ----
+// The client side of what @x402/core's x402Client and @x402/evm's ExactEvmScheme do, written out so the SDK
+// keeps no dependency: the payload sent is theirs field for field (test/x402-pay.mjs compares the two).
+
+/** The USDC contract of each network a purchase may pay on (CAIP-2 → address) — the Python SDK's table. */
+export const USDC: Readonly<Record<string, string>> = {
+  "eip155:84532": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia
+  "eip155:8453": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base
+};
+const USDC_DECIMALS = 6;
+const DEFAULT_NETWORKS = ["eip155:84532"];
+const DEFAULT_MAX_PRICE = "1.00";
+const PURCHASE_TIMEOUT_MS = 90_000;
+
+/** The EIP-712 types of an EIP-3009 transfer authorization (USDC's `transferWithAuthorization`). */
+export const TRANSFER_TYPES = {
+  TransferWithAuthorization: [
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "value", type: "uint256" },
+    { name: "validAfter", type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+} as const;
+/** What the wallet signs to pay: uint256 as bigint, address / bytes32 as 0x strings, as viem takes them. */
+export type TransferAuthorizationMessage = {
+  from: `0x${string}`;
+  to: `0x${string}`;
+  value: bigint;
+  validAfter: bigint;
+  validBefore: bigint;
+  nonce: `0x${string}`;
+};
+/**
+ * The wallet that pays, for `buy()`, `buyDataset()` and `buyCredits()`: it signs the EIP-3009 payment
+ * authorization and, when you accept the terms, WITAN's terms acknowledgement — both EIP-712 typed data.
+ * A viem local account (`privateKeyToAccount(...)`) is one as it is; the SDK never sees the key.
+ */
+export interface WalletSigner {
+  address: string;
+  /** The payment: an EIP-3009 `TransferWithAuthorization` over the asset's own domain. */
+  signTypedData(args: {
+    domain: { name: string; version: string; chainId: number; verifyingContract: `0x${string}` };
+    types: typeof TRANSFER_TYPES;
+    primaryType: "TransferWithAuthorization";
+    message: TransferAuthorizationMessage;
+  }): Promise<string>;
+  /** The terms acknowledgement, as `TermsAckSigner` signs it. */
+  signTypedData(args: {
+    domain: { name: string; version: string; chainId: number };
+    types: typeof ACK_TYPES;
+    primaryType: "TermsAck";
+    message: TermsAckMessage;
+  }): Promise<string>;
+}
+export interface X402BuyOptions {
+  /** The wallet that pays (a viem account, or your own `WalletSigner`). */
+  signer: WalletSigner;
+  /** The terms version you read (`/legal/terms-summary`); falls back to WITAN_ACCEPT_TERMS. See `witanTermsAck`. */
+  acceptTerms?: string;
+  /** The most this purchase may cost, in USD (`"0.25"`). Falls back to WITAN_MAX_PRICE, then 1.00. */
+  maxPrice?: string | number;
+  /** The networks it may pay on (CAIP-2, an array or a comma list). Falls back to WITAN_X402_NETWORKS,
+   *  then Base Sepolia (`eip155:84532`) only. */
+  networks?: string | string[];
+}
+/** The settlement the pay service attaches to a paid answer (its PAYMENT-RESPONSE header).
+ *  `transaction` is the proof of purchase a dispute names. */
+export interface X402Settlement {
+  success: boolean;
+  transaction: string;
+  network: string;
+  payer?: string;
+  [key: string]: unknown;
+}
+/** The pay service's JSON answer for what was bought, with the settlement under `x402`. */
+export type X402Purchase = Record<string, unknown> & { x402?: X402Settlement };
+
+/** One payment option of an x402 v2 PaymentRequired (`accepts[i]`). */
+interface X402Requirements {
+  scheme: string;
+  network: string;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  extra?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+const refuse = (why: string) => new PaymentRequiredError({ error: why });
+
+function allowedNetworks(networks?: string | string[]): string[] {
+  const raw = networks ?? env("WITAN_X402_NETWORKS") ?? "";
+  const list = (typeof raw === "string" ? raw.split(",") : raw).map((n) => String(n).trim()).filter(Boolean);
+  const chosen = list.length ? [...new Set(list)] : DEFAULT_NETWORKS;
+  const unknown = chosen.find((n) => !(n in USDC));
+  if (unknown) throw refuse(`network ${unknown} is not one this SDK pays on (USDC is known on ${Object.keys(USDC).join(", ")})`);
+  return chosen;
+}
+
+/** The most one purchase may cost, in USDC atomic units (millionths), rounded down: no floating point. */
+function priceCap(maxPrice?: string | number): bigint {
+  const raw = maxPrice ?? (env("WITAN_MAX_PRICE") || DEFAULT_MAX_PRICE);
+  const m = /^\+?([0-9]*)(?:\.([0-9]*))?$/.exec(String(raw).trim().replace(/^\$+/, ""));
+  if (!m || !/[0-9]/.test(`${m[1]}${m[2] ?? ""}`)) throw refuse(`max price must be a USD amount such as 1.00, not ${JSON.stringify(raw)}`);
+  return BigInt(m[1] || "0") * 10n ** BigInt(USDC_DECIMALS) + BigInt((m[2] ?? "").slice(0, USDC_DECIMALS).padEnd(USDC_DECIMALS, "0"));
+}
+
+function usdc(atomic: bigint): string {
+  const unit = 10n ** BigInt(USDC_DECIMALS);
+  const frac = (atomic % unit).toString().padStart(USDC_DECIMALS, "0").replace(/0+$/, "");
+  return `${atomic / unit}${frac ? `.${frac}` : ""}`;
+}
+
+/** Why one payment option of a 402 may not be paid, or undefined when it may. The first four rules and
+ *  their wording are the Python SDK's; the rest are what this SDK can sign at all. */
+function refusal(r: X402Requirements, networks: string[], cap: bigint): string | undefined {
+  const network = String(r.network ?? ""), asset = String(r.asset ?? ""), amount = String(r.amount ?? "");
+  if (!networks.includes(network)) {
+    return `network ${network} is not allowed here (allowed: ${networks.join(", ")}; opt in with networks or WITAN_X402_NETWORKS)`;
+  }
+  if (asset.toLowerCase() !== USDC[network].toLowerCase()) return `asset ${asset} is not USDC on ${network} (${USDC[network]})`;
+  if (!ATOMIC.test(amount)) return `amount ${JSON.stringify(amount)} is not a USDC amount`;
+  if (BigInt(amount) > cap) {
+    return `the price, ${usdc(BigInt(amount))} USDC, is above the cap of ${usdc(cap)} USDC (raise it with maxPrice or WITAN_MAX_PRICE)`;
+  }
+  if (r.scheme !== "exact") return `scheme ${JSON.stringify(r.scheme)} is not one this SDK pays with (exact)`;
+  const method = r.extra?.assetTransferMethod ?? "eip3009";
+  if (method !== "eip3009") return `asset transfer method ${JSON.stringify(method)} is not one this SDK pays with (eip3009)`;
+  if (typeof r.payTo !== "string" || !ADDRESS.test(r.payTo)) return `payTo ${JSON.stringify(r.payTo)} is not an address`;
+  if (typeof r.extra?.name !== "string" || !r.extra.name || typeof r.extra?.version !== "string" || !r.extra.version) {
+    return `the 402 names no EIP-712 domain (extra.name, extra.version) for ${asset}`;
+  }
+  if (!Number.isSafeInteger(r.maxTimeoutSeconds) || r.maxTimeoutSeconds <= 0) {
+    return `maxTimeoutSeconds ${JSON.stringify(r.maxTimeoutSeconds)} is not a number of seconds`;
+  }
+  return undefined;
+}
+
+/** The first payment option of the 402 that passes the limits; otherwise refuses, naming every reason. */
+function chooseRequirements(required: Record<string, unknown>, networks: string[], cap: bigint): X402Requirements {
+  if (required.x402Version !== 2) throw refuse(`refusing to pay: x402 version ${JSON.stringify(required.x402Version)} is not one this SDK pays with (2)`);
+  const accepts = Array.isArray(required.accepts) ? (required.accepts as unknown[]) : [];
+  const reasons: string[] = [];
+  for (const a of accepts) {
+    if (!a || typeof a !== "object" || Array.isArray(a)) continue;
+    const why = refusal(a as X402Requirements, networks, cap);
+    if (why === undefined) return a as X402Requirements;
+    reasons.push(why);
+  }
+  throw refuse(`refusing to pay: ${reasons.length ? [...new Set(reasons)].join("; ") : "the 402 offers no way to pay"}`);
+}
+
+/** The PaymentPayload @x402/core's x402Client builds with @x402/evm's ExactEvmScheme (EIP-3009), field for field:
+ *  `{ x402Version, payload: { authorization, signature }, extensions, resource, accepted }`. */
+async function exactEvmPayload(signer: WalletSigner, required: Record<string, unknown>, accepted: X402Requirements): Promise<X402PaymentPayloadLike & Record<string, unknown>> {
+  const now = Math.floor(Date.now() / 1000);
+  const authorization = {
+    from: signer.address,
+    to: checksumAddress(accepted.payTo),
+    value: accepted.amount,
+    validAfter: "0",
+    validBefore: String(now + accepted.maxTimeoutSeconds),
+    nonce: randomHex32(),
+  };
+  const extra = accepted.extra as { name: string; version: string };
+  const signature = await signer.signTypedData({
+    domain: { name: extra.name, version: extra.version, chainId: Number(EVM_NETWORK.exec(accepted.network)![1]), verifyingContract: checksumAddress(accepted.asset) },
+    types: TRANSFER_TYPES,
+    primaryType: "TransferWithAuthorization",
+    message: {
+      from: checksumAddress(authorization.from), to: authorization.to, value: BigInt(authorization.value),
+      validAfter: BigInt(authorization.validAfter), validBefore: BigInt(authorization.validBefore), nonce: authorization.nonce,
+    },
+  });
+  return {
+    x402Version: 2,
+    payload: { authorization, signature },
+    ...(required.extensions === undefined ? {} : { extensions: required.extensions as Record<string, unknown> }),
+    ...(required.resource === undefined ? {} : { resource: required.resource }),
+    accepted,
+  };
+}
+
+/** A purchase's answer: ≥ 400 throws "purchase failed"; otherwise the JSON, with the settlement under `x402`. */
+async function x402Answer(res: Response): Promise<X402Purchase> {
+  const text = await res.text();
+  if (res.status >= 400) {
+    let body: unknown = text.slice(0, 500);
+    try { body = JSON.parse(text); } catch { /* not JSON */ }
+    throw new WitanError(res.status, `purchase failed: ${brief(text) ?? `${res.status} ${res.statusText}`.trim()}`, body);
+  }
+  let body: unknown;
+  try { body = JSON.parse(text); } catch { throw new WitanError(res.status, `the pay service answered ${res.status} with something other than JSON — if a payment was sent, check purchases() before buying again`, text.slice(0, 500)); }
+  const settlement = decodeX402Header(res.headers.get("payment-response"));
+  if (body && typeof body === "object" && !Array.isArray(body) && settlement) (body as Record<string, unknown>).x402 = settlement;
+  return body as X402Purchase;
+}
+
+function randomHex32(): `0x${string}` {
+  const c = (globalThis as { crypto?: { getRandomValues?: <T extends ArrayBufferView>(a: T) => T } }).crypto;
+  if (typeof c?.getRandomValues !== "function") throw new WitanError(0, "this runtime has no WebCrypto (crypto.getRandomValues) to make a payment nonce with");
+  return `0x${[...c.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** x402 headers are base64 of UTF-8 JSON (as @x402/core encodes them; no Buffer, for edge runtimes). */
+function encodeX402Header(value: unknown): string {
+  const utf8 = new TextEncoder().encode(JSON.stringify(value));
+  let bin = "";
+  for (let i = 0; i < utf8.length; i += 0x8000) bin += String.fromCharCode(...utf8.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function decodeX402Header(header: string | null): Record<string, unknown> | undefined {
+  if (!header) return undefined;
+  try {
+    const v = JSON.parse(new TextDecoder().decode(fromBase64(header.trim())));
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// EIP-55 checksum, as viem's getAddress writes the addresses x402 signs and sends: Keccak-256 (not SHA3-256,
+// which WebCrypto would have) over the lowercase hex.
+const KECCAK_RC = [
+  0x1n, 0x8082n, 0x800000000000808an, 0x8000000080008000n, 0x808bn, 0x80000001n, 0x8000000080008081n, 0x8000000000008009n,
+  0x8an, 0x88n, 0x80008009n, 0x8000000an, 0x8000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+  0x8000000000008002n, 0x8000000000000080n, 0x800an, 0x800000008000000an, 0x8000000080008081n, 0x8000000000008080n,
+  0x80000001n, 0x8000000080008008n,
+];
+const KECCAK_ROT = [1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44];
+const KECCAK_PI = [10, 7, 11, 17, 18, 3, 5, 16, 8, 21, 24, 4, 15, 23, 19, 13, 12, 2, 20, 14, 22, 9, 6, 1];
+const MASK64 = (1n << 64n) - 1n;
+const rotl64 = (x: bigint, n: number) => ((x << BigInt(n)) | (x >> BigInt(64 - n))) & MASK64;
+function keccakF(st: bigint[]): void {
+  const bc = new Array<bigint>(5);
+  for (let round = 0; round < 24; round++) {
+    for (let i = 0; i < 5; i++) bc[i] = st[i] ^ st[i + 5] ^ st[i + 10] ^ st[i + 15] ^ st[i + 20];
+    for (let i = 0; i < 5; i++) {
+      const t = bc[(i + 4) % 5] ^ rotl64(bc[(i + 1) % 5], 1);
+      for (let j = 0; j < 25; j += 5) st[j + i] ^= t;
+    }
+    let t = st[1];
+    for (let i = 0; i < 24; i++) {
+      const j = KECCAK_PI[i], next = st[j];
+      st[j] = rotl64(t, KECCAK_ROT[i]);
+      t = next;
+    }
+    for (let j = 0; j < 25; j += 5) {
+      for (let i = 0; i < 5; i++) bc[i] = st[j + i];
+      for (let i = 0; i < 5; i++) st[j + i] ^= ~bc[(i + 1) % 5] & MASK64 & bc[(i + 2) % 5];
+    }
+    st[0] ^= KECCAK_RC[round];
+  }
+}
+/** Keccak-256 of `data`, as the Ethereum tools compute it. */
+function keccak256(data: Uint8Array): Uint8Array {
+  const rate = 136;
+  const padded = new Uint8Array((Math.floor(data.length / rate) + 1) * rate);
+  padded.set(data);
+  padded[data.length] ^= 0x01;
+  padded[padded.length - 1] ^= 0x80;
+  const st = new Array<bigint>(25).fill(0n);
+  for (let off = 0; off < padded.length; off += rate) {
+    for (let i = 0; i < rate / 8; i++) {
+      let lane = 0n;
+      for (let b = 7; b >= 0; b--) lane = (lane << 8n) | BigInt(padded[off + i * 8 + b]);
+      st[i] ^= lane;
+    }
+    keccakF(st);
+  }
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) out[i] = Number((st[i >> 3] >> BigInt(8 * (i & 7))) & 0xffn);
+  return out;
+}
+/** An address in its EIP-55 mixed-case form (viem's `getAddress`). */
+function checksumAddress(address: string): `0x${string}` {
+  if (!ADDRESS.test(address)) throw new WitanError(0, `${JSON.stringify(address)} is not an address`);
+  const hex = address.slice(2).toLowerCase();
+  const hash = keccak256(new TextEncoder().encode(hex));
+  let out = "0x";
+  for (let i = 0; i < 40; i++) {
+    const nibble = (hash[i >> 1] >> (i % 2 === 0 ? 4 : 0)) & 0xf;
+    out += nibble >= 8 ? hex[i].toUpperCase() : hex[i];
+  }
+  return out as `0x${string}`;
 }
 
 function webCrypto(): SubtleCrypto {

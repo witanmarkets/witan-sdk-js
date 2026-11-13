@@ -1,7 +1,7 @@
 // The checks a runtime must pass to be listed under Requirements, using only what a Worker or an
 // Edge function has: fetch, web streams, WebCrypto. test/edge.mjs bundles this with the SDK and runs it
 // in workerd (Cloudflare Workers) and in edge-runtime (Vercel Edge); Deno, Bun and Node run the unit tests.
-import { Witan, signedStatement, verifyManifest } from "../dist/index.js";
+import { USDC, Witan, signedStatement, verifyManifest } from "../dist/index.js";
 
 const ORIGIN = "https://origin.test";
 const b64 = (u8) => btoa(String.fromCharCode(...u8));
@@ -24,6 +24,22 @@ export async function run() {
   const signed = { ...m, signature: { alg: "Ed25519", kid: "k1", origin: ORIGIN, sig: b64(sig) } };
   out.verify = (await verifyManifest(signed, keys)) === "verified";
   out.tamper = await verifyManifest({ ...signed, version: 2 }, keys).then(() => false, () => true);
+  // an x402 purchase against a stub pay service, with a stub wallet: the payment header (base64 of UTF-8 JSON,
+  // no Buffer), the nonce (getRandomValues) and the checksummed payee (Keccak-256) are built from web APIs only
+  const required = { x402Version: 2, resource: { url: "https://pay.test/paid/knowledge?id=u1" }, extensions: { "witan-notice": { info: { seller: "Ünïcödé ✓" } } },
+    accepts: [{ scheme: "exact", network: "eip155:84532", amount: "10000", asset: USDC["eip155:84532"], payTo: "0x" + "ab".repeat(20), maxTimeoutSeconds: 60, extra: { name: "USDC", version: "2" } }] };
+  const utf8b64 = (v) => b64(new TextEncoder().encode(JSON.stringify(v)));
+  let sent;
+  const pay = new Witan({ baseUrl: "https://api.test", payUrl: "https://pay.test", fetch: async (_u, init) => {
+    const h = init.headers["PAYMENT-SIGNATURE"];
+    if (!h) return new Response("{}", { status: 402, headers: { "PAYMENT-REQUIRED": utf8b64(required) } });
+    sent = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(h), (c) => c.charCodeAt(0))));
+    return new Response(JSON.stringify({ id: "u1" }), { headers: { "PAYMENT-RESPONSE": utf8b64({ success: true, transaction: "0x" + "cd".repeat(32), network: "eip155:84532" }) } });
+  } });
+  const signer = { address: "0x" + "12".repeat(20), signTypedData: async () => "0x" + "ee".repeat(65) };
+  const bought = await pay.buy("u1", { signer });
+  out.pay = bought.x402?.success === true && sent?.extensions?.["witan-notice"]?.info?.seller === "Ünïcödé ✓"
+    && sent.payload.authorization.to === "0xABaBaBaBABabABabAbAbABAbABabababaBaBABaB" && /^0x[0-9a-f]{64}$/.test(sent.payload.authorization.nonce);
   // gzip both ways where the runtime has the streams (push compresses, export reads .jsonl.gz)
   if (typeof CompressionStream === "undefined" || typeof DecompressionStream === "undefined") out.gzip = "absent";
   else {

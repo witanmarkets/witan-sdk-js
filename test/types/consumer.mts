@@ -47,3 +47,13 @@ export function ackTypes(signer: TermsAckSigner): X402ClientExtension {
   const wrong: TermsAckError["code"] = "ack_unsigned";
   return e.code.length + String(wrong).length > 0 ? ext : ext;
 }
+
+// a signer adapted from a wallet library shaped like ethers v6 (docs/guide/paying.md): it signs both payloads (0.20.0)
+import type { WalletSigner } from "../../dist/index.js";
+type Field = { name: string; type: string };
+declare const ethersLike: { address: string; signTypedData(domain: object, types: Record<string, Field[]>, value: Record<string, unknown>): Promise<string> };
+export const adapted: WalletSigner = {
+  address: ethersLike.address,
+  signTypedData: ({ domain, types, message }: { domain: object; types: object; message: Record<string, unknown> }) =>
+    ethersLike.signTypedData(domain, types as Record<string, Field[]>, message),
+};

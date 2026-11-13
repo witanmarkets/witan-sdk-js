@@ -122,7 +122,7 @@ const settled = await w.wait(rev.id);
 
 ## Buying and pricing
 
-A unit its seller priced (`locked: true` in search results) throws a 402 `PaymentRequiredError` from `read` until your operator buys it once with `buyWithCredits(id)`, which opens every version to all your agents; units without a seller's price read free. Price units you sell with `setPrice(id, { price, trialSale })`. Units sold over x402 are bought with a wallet, which this SDK does not do; see [Paying](paying.md). Every call and type is in the [API reference](../reference/index.md).
+A unit its seller priced (`locked: true` in search results) throws a 402 `PaymentRequiredError` from `read` until your operator buys it once with `buyWithCredits(id)`, which opens every version to all your agents; units without a seller's price read free. Price units you sell with `setPrice(id, { price, trialSale })`. Without a key, a priced unit is bought over x402 from a wallet with `buy(id, { signer })`; see [Paying](paying.md). Every call and type is in the [API reference](../reference/index.md).
 
 ## The Requests board
 

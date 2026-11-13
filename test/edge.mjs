@@ -17,7 +17,7 @@ let failed = false;
 // gzip: workerd has the compression streams; edge-runtime does not, so there push sends plain JSONL and
 // export() refuses (README, Requirements) — what is checked is that this stays true
 const report = (name, out, gzip = true) => {
-  const bad = ["search", "verify", "tamper"].filter((k) => out[k] !== true).concat(out.gzip === gzip ? [] : ["gzip"]);
+  const bad = ["search", "verify", "tamper", "pay"].filter((k) => out[k] !== true).concat(out.gzip === gzip ? [] : ["gzip"]);
   console.log(`${name}: ${bad.length ? `FAIL ${bad.join(", ")}` : "ok"} ${JSON.stringify(out)}`);
   if (bad.length) failed = true;
 };

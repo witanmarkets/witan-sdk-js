@@ -1,31 +1,68 @@
 # Paying
 
-WITAN charges for paid dataset versions and for storage or egress past the free tier, and sells knowledge units over x402 to buyers without an API key. This SDK pays from your operator's prepaid credits with the API key, reads quotas and balances, and lists what a wallet bought; it does not make x402 wallet payments. The public service runs on the Base Sepolia testnet: every price is paid in test USDC, which has no monetary value.
+WITAN charges for paid dataset versions and for storage or egress past the free tier, and sells knowledge units over x402 to buyers without an API key. This SDK pays from your operator's prepaid credits with the API key, and over x402 from a wallet you hold: it never takes the wallet's key, only a `signer` that signs the payment. It also reads quotas and balances, and lists what a wallet bought. The public service runs on the Base Sepolia testnet: every price is paid in test USDC, which has no monetary value.
 
 ## What this SDK can pay for
 
 | To | With `witan-sdk` | Otherwise |
 |---|---|---|
-| Buy a paid dataset version | `projects.buy(slug, { version })`, from prepaid credits | x402 from a wallet at the `pay` URL of the 402 |
-| Read a knowledge unit | `read(id)` with an agent key, or with none for a free unit; see [Knowledge](knowledge.md) | a priced unit without a key: x402 from a wallet |
-| Buy a unit its seller priced (`locked: true`) | `buyWithCredits(id)`, from credits, once per listing | x402 from a wallet |
+| Buy a paid dataset version | `projects.buy(slug, { version })`, from prepaid credits; `buyDataset(slug, { version, signer })`, over x402 from a wallet | any x402 client at the `pay` URL of the 402 |
+| Read a knowledge unit | `read(id)` with an agent key, or with none for a free unit; see [Knowledge](knowledge.md) | |
+| Buy a unit its seller priced (`locked: true`) | `buyWithCredits(id)`, from credits, once per listing; `buy(id, { signer })`, over x402 from a wallet, without a key | any x402 client |
 | Price what you sell | `submit({ ..., price, trialSale })`, `setPrice(id, { price, trialSale })`, `projects.update(slug, { price, trialSale })` | the MCP tool `set_knowledge_price`, or `wtn price` in the Python SDK; the operator console only shows prices |
-| Top up prepaid credits | not available; `credits()` gives the `topup` URL | x402 from a wallet at that URL |
+| Top up prepaid credits | `buyCredits({ signer })`, over x402 from a wallet; `credits()` gives the `topup` URL. Credit packs are not sold on mainnet | any x402 client at that URL |
 | List what a wallet bought | `purchases({ address, sign })` | |
-| Dispute a payment | not available | the Python SDK's `dispute(transaction, reason)` |
+| Dispute a payment | `dispute({ transaction, reason, address, sign })`, then `disputeStatus(id)` | |
 
-!!! note "x402 payments are not in the JavaScript SDK"
-    `witan-sdk` never holds a wallet key and never signs a payment. To pay from a wallet, use the Python SDK (`pip install "witan-sdk[x402]"`, then `buy`, `buy_dataset` and `buy_credits`), or any x402 client against the URLs that errors and `credits()` carry; `witanTermsAck` lets that client sign WITAN's terms acknowledgement (below).
+!!! note "The SDK never holds a wallet key"
+    `buy`, `buyDataset` and `buyCredits` take a `signer`: an object with the wallet's `address` and a `signTypedData` that signs EIP-712 typed data. A viem account is one as it is. The key stays wherever your signer keeps it, and the SDK reads none from the environment. If you already use an x402 client, keep it: `witanTermsAck` lets that client sign WITAN's terms acknowledgement (below).
 
 ## Getting test USDC
 
 The public service runs on Base Sepolia. Get test USDC for a wallet from Circle's faucet, https://faucet.circle.com (choose Base Sepolia). A buyer needs no ETH: it only signs the payment authorization, and the facilitator submits the transaction and pays its gas.
 
-## Signing the terms acknowledgement with your own x402 client
+## Buy from a wallet over x402
+
+`buy(id, { signer, acceptTerms, maxPrice, networks })` buys a unit with USDC over x402, with no API key: the payment is the authorization. `buyDataset(slug, { version, signer, ... })` buys one version of a paid dataset (the newest without `version`), and `buyCredits({ operatorId, signer, maxPrice, networks })` one credit pack for your operator (by default the operator of the API key, read from `credits()`).
+
+The SDK asks the pay service for the price (a 402 whose `PAYMENT-REQUIRED` header holds the x402 requirements), and checks what it asks for before anything is signed:
+
+| Limit | Set with | Default |
+|---|---|---|
+| The network | `networks`, an array or a comma list of CAIP-2 ids, or `WITAN_X402_NETWORKS` | Base Sepolia (`eip155:84532`) only; add `eip155:8453` for Base |
+| The asset | — | USDC on that network |
+| The price | `maxPrice` in USD (`"0.25"`), or `WITAN_MAX_PRICE` | 1.00 |
+| The payment | — | x402 version 2, scheme `exact`, an EIP-3009 transfer authorization |
+
+When no way to pay in the 402 passes, it throws `PaymentRequiredError` with a message starting "refusing to pay:" that names each rule, and nothing is signed or sent. Otherwise `signer` signs an EIP-3009 `TransferWithAuthorization` for exactly the quoted amount to the quoted payee, and the SDK sends the same request once more with the signed payment in `PAYMENT-SIGNATURE`. The facilitator settles it on-chain and the answer comes back in that round trip. It returns the pay service's JSON (for a unit: the unit, with `receipt_url`), with the settlement from the `PAYMENT-RESPONSE` header under `x402`: `{ success, transaction, network, payer }`. `transaction` is what a dispute names.
+
+```ts
+import { privateKeyToAccount } from "viem/accounts";
+import { PaymentRequiredError, Witan } from "witan-sdk";
+
+const signer = privateKeyToAccount(process.env.WALLET_PRIVATE_KEY as `0x${string}`);   // your own variable
+const w = new Witan();   // no API key needed to pay over x402
+
+try {
+  const unit = await w.buy("5e5fc8dd-af67-4f34-839b-b366ef05d43d", {
+    signer,
+    maxPrice: "0.25",                              // refuse a 402 above $0.25
+    acceptTerms: "<the terms version you read>",   // signs the terms acknowledgement (below), for this version only
+  });
+  console.log(unit.title, unit.receipt_url, unit.x402?.transaction);
+} catch (e) {
+  if (e instanceof PaymentRequiredError) console.log(e.code ?? "refused", e.message);   // nothing was charged
+  else throw e;
+}
+```
+
+The paid request is sent once, within 90 seconds, and never repeated. When it fails after the payment went out (the connection drops, or the service answers 5xx), the error says so: check `purchases()` before buying again. When the pay service refuses the payment before charging it, for example a terms acknowledgement that does not verify, it throws `PaymentRequiredError` whose `code` starts with `ack_`.
+
+## Signing the terms acknowledgement
 
 A 402 for a unit or a dataset version carries the x402 extension `witan-terms-ack`: the terms version and hash, the item, the amount, who is paid, a nonce and an expiry. The paying wallet can sign, with that payment, that it read those terms (an EIP-712 `TermsAck` bound to the payment's EIP-3009 nonce). On the testnet a payment without the signature is still taken; on mainnet a signed acknowledgement will be required, and a payment without one is refused before it is charged.
 
-`witanTermsAck({ signer, item, acceptTerms })` is that signature as an extension for an x402 v2 client (`@x402/core`'s `registerExtension`). Read the terms first: the summary is at https://witan.markets/legal/terms-summary, and the version a purchase asks about is the 402's `extensions["witan-terms-ack"].info.termsVersion`. Pass that version as `acceptTerms` (or set `WITAN_ACCEPT_TERMS`); without it nothing is signed.
+`buy`, `buyDataset` and `buyCredits` sign it with the same `signer` when you pass `acceptTerms`. With your own x402 client, `witanTermsAck({ signer, item, acceptTerms })` is that signature as an extension for an x402 v2 client (`@x402/core`'s `registerExtension`). Read the terms first: the summary is at https://witan.markets/legal/terms-summary, and the version a purchase asks about is the 402's `extensions["witan-terms-ack"].info.termsVersion`. Pass that version as `acceptTerms` (or set `WITAN_ACCEPT_TERMS`); without it nothing is signed.
 
 ```ts
 import { wrapFetchWithPayment } from "@x402/fetch";
@@ -51,15 +88,17 @@ const res = await pay(`https://witan.markets/paid/knowledge?id=${encodeURICompon
 
 Before it signs, the extension holds the 402 to the purchase: the item must be `item`, the amount and payee those of the payment, the network the one being paid on, `signer` the wallet the payment is from, and the acknowledgement not expired. Otherwise, and when the 402 asks for another terms version or requires an acknowledgement and no version was named, it throws `TermsAckError` (a `PaymentRequiredError` whose `code` is `ack_mismatch`, `ack_terms_version` or `ack_missing`) and nothing is sent or charged.
 
-A viem account is a `signer` as it is. With ethers, adapt its `signTypedData`:
+A viem account is a `signer` as it is, for `buy*()` and for `witanTermsAck`. With ethers, adapt its `signTypedData`:
 
 ```ts
-import type { TermsAckSigner } from "witan-sdk";
+import type { TypedDataField } from "ethers";
+import type { WalletSigner } from "witan-sdk";
 
-// wallet: an ethers v6 Wallet or Signer
-const signer: TermsAckSigner = {
+// wallet: an ethers v6 Wallet or Signer; it signs both the payment and the acknowledgement
+const signer: WalletSigner = {
   address: wallet.address,
-  signTypedData: ({ domain, types, message }) => wallet.signTypedData(domain, { TermsAck: [...types.TermsAck] }, message),
+  signTypedData: ({ domain, types, message }: { domain: object; types: object; message: Record<string, unknown> }) =>
+    wallet.signTypedData(domain, types as Record<string, TypedDataField[]>, message),
 };
 ```
 
@@ -145,7 +184,7 @@ function topupUrl(e: PaymentRequiredError): string | undefined {
 }
 ```
 
-An agent that cannot pay from a wallet stops here and reports the `topup` URL to its operator.
+An agent that cannot pay from a wallet stops here and reports the `topup` URL to its operator; one that holds a wallet can pay with `buyCredits({ signer })` or buy the item itself over x402.
 
 ## Purchase history of a wallet
 

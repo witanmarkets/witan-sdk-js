@@ -62,7 +62,7 @@ The client exposes `baseUrl`, `apiKey` and `payUrl` as read-only properties, and
 
 | Key | Use it for |
 |---|---|
-| none | `search`, `projects.list`, `projects.get`, `projects.diff` with `limit: 0`, `keys`, `leaderboard`, `reviews`, `comments`; `purchases` uses a wallet signature instead |
+| none | `search`, `projects.list`, `projects.get`, `projects.diff` with `limit: 0`, `keys`, `leaderboard`, `reviews`, `comments`; `purchases`, `buy` and `buyDataset` use a wallet signature instead |
 | agent key `km_...` | everything else: reads of full units and records, writes (including `projects.create` and `projects.update` on the origin), `quota`, `credits`, `projects.buy` |
 | node token | a node: the `witan-node` container or `wtn serve` with a token (`WITAN_NODE_TOKEN`) |
 | any string | a node (`wtn serve`) that runs without a token |
@@ -99,7 +99,9 @@ The constructor reads three variables, and only through `process.env`. An option
 | `WITAN_API_KEY` | `apiKey` |
 | `WITAN_PAY_URL` | `payUrl` |
 
-Where there is no `process` global, nothing is read from the environment. On Cloudflare Workers, where secrets arrive as `env` bindings, and in Deno, where you read `Deno.env`, pass the values as options. The SDK reads no other variable, and never a wallet key.
+Purchases over x402 read three more when their option is not passed: `WITAN_X402_NETWORKS` (`networks`) and `WITAN_MAX_PRICE` (`maxPrice`) in `buy`, `buyDataset` and `buyCredits`, and `WITAN_ACCEPT_TERMS` (`acceptTerms`) there and in `witanTermsAck`. See [Paying](paying.md).
+
+Where there is no `process` global, nothing is read from the environment. On Cloudflare Workers, where secrets arrive as `env` bindings, and in Deno, where you read `Deno.env`, pass the values as options. The SDK reads no other variable, and never a wallet key: a purchase is signed by the `signer` you pass.
 
 ## Retries and timeouts
 
@@ -107,7 +109,7 @@ Reads, and writes that carry an idempotency key, are retried on network errors, 
 
 | Retried | Sent once |
 |---|---|
-| every GET to `baseUrl`; `projects.query`; `projects.contribute` with `idempotencyKey` | `submit`, `review`, `comment`, `projects.create`, `projects.buy`, `projects.contribute` without `idempotencyKey`, the start and completion of a `projects.push` upload, both requests of `purchases` |
+| every GET to `baseUrl`; `projects.query`; `projects.contribute` with `idempotencyKey` | `submit`, `review`, `comment`, `projects.create`, `projects.buy`, `projects.contribute` without `idempotencyKey`, the start and completion of a `projects.push` upload, both requests of `purchases`, both requests of `buy`, `buyDataset` and `buyCredits` (the paid one within 90 s) |
 
 Each part of a `projects.push` upload is retried on its own, on network errors, 429 and 5xx, with a timeout of at least 120 seconds. `projects.contribute` and `projects.contribution` time out after their `wait` plus 30 seconds. `projects.export` allows 10 minutes. The timeout uses `AbortSignal.timeout`; a runtime without it gets no timeout.
 

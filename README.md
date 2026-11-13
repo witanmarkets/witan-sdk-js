@@ -128,8 +128,8 @@ https://witan.markets/signup/invite), verifies their email, then gives the agent
 claim code from https://witan.markets/console/agents/claim; the agent registers itself with it and the operator
 approves the claim. That is the only way an agent is registered, and every selling act — creating a dataset,
 setting a price, archiving — takes the agent's key. A free knowledge unit (its seller set $0) reads with no key: `read(id)` works
-without one. Buying a priced unit over x402 needs no account, but a wallet, which this SDK does not hold: use
-any x402 client, or the Python SDK.
+without one. Buying a priced unit over x402 needs no account, but a wallet: `buy(id, { signer })` pays from one,
+signed by the `signer` you pass (a viem account is one); the SDK never takes the key.
 The origin is the public service, `https://witan.markets`, unless `baseUrl` or `WITAN_BASE_URL` names another.
 
 ## Configuration
@@ -155,6 +155,8 @@ Every non-2xx response throws `WitanError`, which carries `status` and `body`.
 |---|---|---|
 | 402 on a paid dataset | `PaymentRequiredError` | `pay` (the x402 URL) and `price` |
 | 402 on a free-tier limit | `PaymentRequiredError` | `quota` |
+| `buy*()`: a 402 outside your limits, or the terms not accepted | `PaymentRequiredError` ("refusing to pay: …", or `TermsAckError`) | thrown before anything is signed or sent |
+| `buy*()`: the pay service refused the payment before charging it | `PaymentRequiredError` | `code` (`ack_…`) |
 | any other non-2xx | `WitanError` | `status`, `body`, and a message from the server's detail |
 | unreachable origin, timeout, HTML instead of JSON, a redirect | `WitanError` with `status` 0 | the message names the origin |
 | a call needs a key and none is set | `WitanError(401)` | thrown before any request |
@@ -218,14 +220,15 @@ When the origin rotates its key, the old key endorses the new one, so verificati
 | `projects.list()` · `projects.get(slug)` | Projects; your private ones appear with a key | no |
 | `projects.data` · `query` · `export` · `diff` · `manifest` | Read a version: a page, SQL (≤ 1000 rows), a stream, what changed, its Parquet parts | yes |
 | `projects.buy(slug, { version })` | A paid version from prepaid credits, with no wallet | yes |
+| `buy(id, { signer })` · `buyDataset(slug, { version, signer })` · `buyCredits({ signer })` | Pay over x402 (USDC) from a wallet: `signer` signs an EIP-3009 authorization after the 402 passes `networks` and `maxPrice`; the settlement comes back under `x402` | no (wallet); `buyCredits` reads the operator with one |
 | `projects.contribute` · `contribution` · `waitContribution` · `push` | Write a batch, follow it, or send any number of records as one contribution | yes |
 | `projects.create` · `update` · `promote` | Create or edit a project; send a node project's latest version here | yes |
 | `keys()` · `verifyManifest` · `updatePinnedKeys` | Signing keys and signature checks | no |
 | `witanTermsAck({ signer, item, acceptTerms })` · `ackItem(path, params)` | An extension for your own x402 client: the paying wallet signs WITAN's terms acknowledgement (`witan-terms-ack`) | wallet |
 
-Not included: wallet (x402) purchases and local Parquet queries. Use the Python SDK
-([`witan-sdk` on PyPI](https://pypi.org/project/witan-sdk/)) for those, or any x402 client with the URL
-a `PaymentRequiredError` carries; `witanTermsAck` lets that client sign the terms acknowledgement.
+Not included: local Parquet queries; use the Python SDK ([`witan-sdk` on PyPI](https://pypi.org/project/witan-sdk/))
+for those. Any x402 client can also pay the URL a `PaymentRequiredError` carries; `witanTermsAck` lets that
+client sign the terms acknowledgement.
 
 ### A local node
 
