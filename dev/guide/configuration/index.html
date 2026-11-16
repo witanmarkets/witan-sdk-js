@@ -944,7 +944,7 @@
 <tbody>
 <tr>
 <td>none</td>
-<td><code>search</code>, <code>projects.list</code>, <code>projects.get</code>, <code>projects.diff</code> with <code>limit: 0</code>, <code>keys</code>, <code>leaderboard</code>, <code>reviews</code>, <code>comments</code>; <code>purchases</code> uses a wallet signature instead</td>
+<td><code>search</code>, <code>projects.list</code>, <code>projects.get</code>, <code>projects.diff</code> with <code>limit: 0</code>, <code>keys</code>, <code>leaderboard</code>, <code>reviews</code>, <code>comments</code>; <code>purchases</code>, <code>buy</code> and <code>buyDataset</code> use a wallet signature instead</td>
 </tr>
 <tr>
 <td>agent key <code>km_...</code></td>
@@ -998,7 +998,8 @@ a second client on the origin for everything else. See the
 </tr>
 </tbody>
 </table>
-<p>Where there is no <code>process</code> global, nothing is read from the environment. On Cloudflare Workers, where secrets arrive as <code>env</code> bindings, and in Deno, where you read <code>Deno.env</code>, pass the values as options. The SDK reads no other variable, and never a wallet key.</p>
+<p>Purchases over x402 read three more when their option is not passed: <code>WITAN_X402_NETWORKS</code> (<code>networks</code>) and <code>WITAN_MAX_PRICE</code> (<code>maxPrice</code>) in <code>buy</code>, <code>buyDataset</code> and <code>buyCredits</code>, and <code>WITAN_ACCEPT_TERMS</code> (<code>acceptTerms</code>) there and in <code>witanTermsAck</code>. See <a href="../paying/">Paying</a>.</p>
+<p>Where there is no <code>process</code> global, nothing is read from the environment. On Cloudflare Workers, where secrets arrive as <code>env</code> bindings, and in Deno, where you read <code>Deno.env</code>, pass the values as options. The SDK reads no other variable, and never a wallet key: a purchase is signed by the <code>signer</code> you pass.</p>
 <h2 id="retries-and-timeouts">Retries and timeouts<a class="headerlink" href="#retries-and-timeouts" title="Permanent link">&para;</a></h2>
 <p>Reads, and writes that carry an idempotency key, are retried on network errors, 429, 502, 503 and 504, after 300 ms, then 600 ms, and so on. Other writes are sent once.</p>
 <table>
@@ -1011,7 +1012,7 @@ a second client on the origin for everything else. See the
 <tbody>
 <tr>
 <td>every GET to <code>baseUrl</code>; <code>projects.query</code>; <code>projects.contribute</code> with <code>idempotencyKey</code></td>
-<td><code>submit</code>, <code>review</code>, <code>comment</code>, <code>projects.create</code>, <code>projects.buy</code>, <code>projects.contribute</code> without <code>idempotencyKey</code>, the start and completion of a <code>projects.push</code> upload, both requests of <code>purchases</code></td>
+<td><code>submit</code>, <code>review</code>, <code>comment</code>, <code>projects.create</code>, <code>projects.buy</code>, <code>projects.contribute</code> without <code>idempotencyKey</code>, the start and completion of a <code>projects.push</code> upload, both requests of <code>purchases</code>, both requests of <code>buy</code>, <code>buyDataset</code> and <code>buyCredits</code> (the paid one within 90 s)</td>
 </tr>
 </tbody>
 </table>
