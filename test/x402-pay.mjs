@@ -82,7 +82,7 @@ test("buy: 402 → one signed payment → the body with the settlement under x40
   assert.equal(s.calls[1].url.href, `${PAY}/paid/knowledge?id=u-1`);
   assert.equal(s.calls[0].headers["payment-signature"], undefined);
   assert.equal(s.calls[0].headers.authorization, undefined, "no API key goes to the pay service");
-  assert.match(s.calls[1].headers["user-agent"], /^witan-sdk-js\/0\.20\.0$/);
+  assert.match(s.calls[1].headers["user-agent"], /^witan-sdk-js\/0\.21\.0$/);
   assert.deepEqual(signer.signed, ["TransferWithAuthorization"], "no acknowledgement signed without acceptTerms");
 
   // the EIP-3009 authorization recovers to the wallet over USDC's domain, and pays what the 402 asked

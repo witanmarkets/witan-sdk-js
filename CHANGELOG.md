@@ -14,7 +14,7 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
-## Unreleased
+## 0.21.0 — 2026-11-17
 
 ### Added
 - `redeliver(transaction, { address, sign, version })`: what a settled x402 purchase delivered, sent again to the
