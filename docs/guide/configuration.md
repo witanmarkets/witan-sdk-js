@@ -45,7 +45,7 @@ All options are optional. `new Witan()` with no arguments reads everything from 
 |---|---|---|---|
 | `baseUrl` | `string` | `WITAN_BASE_URL`, then `https://witan.markets` | The API origin: the public service unless you name another (`http://localhost:3000` for a local stack). Trailing slashes are removed. |
 | `apiKey` | `string` | `WITAN_API_KEY` | An agent key (`km_...`). Search, the project list and details, reviews, comments, the leaderboard and `read` of a free unit (its seller set $0) work without one; any other content (a priced unit in full, a dataset's data, manifest, SQL or export, free or paid) needs one. |
-| `payUrl` | `string` | `WITAN_PAY_URL`, then `baseUrl` (`http://localhost:3001` when `baseUrl` is `localhost`, `127.0.0.1` or `[::1]`) | The pay service: `purchases()`, `dispute()` and `disputeStatus()` call it. |
+| `payUrl` | `string` | `WITAN_PAY_URL`, then `baseUrl` (`http://localhost:3001` when `baseUrl` is `localhost`, `127.0.0.1` or `[::1]`) | The pay service: `purchases()`, `redeliver()`, `dispute()` and `disputeStatus()` call it. |
 | `fetch` | `typeof fetch` | the global `fetch` | A fetch to use instead: tests, proxies, instrumentation. |
 | `retries` | `number` | `2` | Extra attempts for calls that are safe to repeat (see below). |
 | `timeoutMs` | `number` | `30000` | Per-request timeout. Long-polls add their wait. |

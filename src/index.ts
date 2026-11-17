@@ -513,7 +513,22 @@ export interface Purchase {
   dispute: { id: string; status: string } | null;
   /** while a dispute can still be opened */
   disputeUntil: string | null;
+  /** A dataset purchase: until when its update period runs (the versions published by then come with it, through
+   *  `redeliver(transaction, { version })`); null without one. */
+  updatesUntil?: string | null;
 }
+/** What `redeliver()` sends again: a unit with its body, or a dataset version's manifest with fresh part URLs. */
+export type Redelivery = Record<string, unknown> & {
+  redelivered: true;
+  transaction: string;
+  /** the split the sale was paid to, if any */
+  split?: string | null;
+  /** a dataset: the version delivered, the one bought, and until when the purchase's update period runs */
+  project?: string;
+  version?: number;
+  boughtVersion?: number;
+  updatesUntil?: string | null;
+};
 /** A dispute on a settled payment, as the pay service reports it. */
 export interface Dispute {
   id: string;
@@ -812,6 +827,43 @@ export class RightsConfirmationRequired extends WitanError {
     this.statement = String(body.statement ?? "");
     this.token = String(body.rightsConfirmation ?? "");
     if (typeof body.expiresAt === "string") this.expiresAt = body.expiresAt;
+  }
+}
+/**
+ * 409 from `buyDataset`: the paying wallet already has this version through the update period of an earlier
+ * purchase, and nothing was charged. Get it at no charge with `redeliver(err.transaction, { version: err.version, ... })`.
+ */
+export class AlreadyCovered extends WitanError {
+  readonly transaction: string;
+  readonly version?: number;
+  readonly updatesUntil?: string;
+  /** the pay service's note on how to ask for it */
+  readonly redeliver?: string;
+  constructor(body: Record<string, unknown>) {
+    super(409, String(body.error ?? "this wallet already has this version"), body);
+    this.name = "AlreadyCovered";
+    this.transaction = String(body.transaction ?? "");
+    if (typeof body.version === "number") this.version = body.version;
+    if (typeof body.updatesUntil === "string") this.updatesUntil = body.updatesUntil;
+    if (typeof body.redeliver === "string") this.redeliver = body.redeliver;
+  }
+}
+/**
+ * 403 from `redeliver(..., { version })`: that version is not part of the purchase (an earlier one, or one published
+ * after its update period ended). Nothing was charged; `buy` is the pay route that sells it.
+ */
+export class NotCovered extends WitanError {
+  readonly buy?: string;
+  readonly version?: number;
+  readonly boughtVersion?: number;
+  readonly updatesUntil?: string | null;
+  constructor(body: Record<string, unknown>) {
+    super(403, String(body.error ?? "this version is not part of the purchase"), body);
+    this.name = "NotCovered";
+    if (typeof body.buy === "string") this.buy = body.buy;
+    if (typeof body.version === "number") this.version = body.version;
+    if (typeof body.boughtVersion === "number") this.boughtVersion = body.boughtVersion;
+    if (body.updatesUntil === null || typeof body.updatesUntil === "string") this.updatesUntil = body.updatesUntil;
   }
 }
 /** A manifest whose signature is missing where required, from other keys, or does not match. */
@@ -1271,6 +1323,43 @@ export class Witan {
     return (await parseBody(res)) as Dispute;
   }
 
+  /**
+   * What a settled x402 purchase delivered, delivered again to the wallet that paid, at no charge — for a delivery
+   * that was lost. `transaction` is the settlement tx hash (`x402.transaction` of a buy, or `transaction` in
+   * `purchases()`). A unit comes back with its body; a dataset as the version manifest with fresh 15-minute part
+   * URLs, with `version`, `boughtVersion` and `updatesUntil`. A dataset sold with an update period also covers the
+   * versions published until `updatesUntil`: ask for one with `version` (a number or `"latest"`); one outside the
+   * period throws `NotCovered` with the pay service's reason and `buy`, and nothing is charged. Without `version`
+   * the answer is the version that was bought.
+   *
+   * Only the wallet that paid can ask: the SDK builds WITAN's redelivery statement, checks it against the one the
+   * pay service issued, and `sign` (personal_sign, as for `purchases`) signs it; only the signature is sent. Only on
+   * a service that pays sales to splits — elsewhere, and for a transaction this wallet did not pay, it throws
+   * `WitanError` 404. A refused or expired signature is 401, too many asks 429.
+   */
+  async redeliver(transaction: string, opts: { address: string; sign: (statement: string) => Promise<string>; version?: number | "latest" }): Promise<Redelivery> {
+    const tx = String(transaction ?? "").trim().toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(tx)) throw new WitanError(0, "transaction must be the settlement tx hash (0x + 64 hex)");
+    const version = opts.version === undefined ? undefined : String(opts.version).trim().toLowerCase();
+    if (version !== undefined && !/^(latest|[1-9][0-9]{0,8})$/.test(version)) {
+      throw new WitanError(0, `version must be a positive integer or "latest", not ${JSON.stringify(opts.version)}`);
+    }
+    const address = opts.address.toLowerCase();
+    const origin = payOrigin(this.payUrl);
+    const query = new URLSearchParams({ transaction: tx, wallet: address, ...(version ? { version } : {}) });
+    const issued = await parseBody(await this.payFetch(`/redeliver/statement?${query}`));
+    const time = checkedTime(issued, (t) => redeliverStatement(tx, address, origin, t, version));
+    const signature = await opts.sign(redeliverStatement(tx, address, origin, time, version));
+    try {
+      const res = await this.payFetch("/redeliver", {}, { transaction: tx, wallet: address, time, signature, ...(version ? { version } : {}) });
+      return (await parseBody(res)) as Redelivery;
+    } catch (e) {
+      const body = e instanceof WitanError && e.status === 403 && e.body && typeof e.body === "object" ? (e.body as Record<string, unknown>) : undefined;
+      if (body && typeof body.buy === "string") throw new NotCovered(body);
+      throw e;
+    }
+  }
+
   /** Where a dispute stands: `{ id, status, kind, amountMicro, transaction, reason, refundMicro, refundTx, ... }`. */
   async disputeStatus(id: string): Promise<Dispute> {
     return (await parseBody(await this.payFetch(`/disputes/${enc(id)}`))) as Dispute;
@@ -1298,7 +1387,12 @@ export class Witan {
   async buy(id: string, opts: X402BuyOptions): Promise<X402Purchase> {
     return this.x402Purchase("/paid/knowledge", { id }, opts);
   }
-  /** Buy one version of a paid dataset over x402 (the latest without `version`); see `buy()`. */
+  /**
+   * Buy one version of a paid dataset over x402 (the latest without `version`); see `buy()`. The answer carries
+   * `updatesUntil`: the versions published until then come with the purchase, at no charge, through
+   * `redeliver(x402.transaction, { version })`. A version the wallet already has that way throws `AlreadyCovered`
+   * (409, nothing charged) with the `transaction` and `version` to redeliver.
+   */
   async buyDataset(slug: string, opts: X402BuyOptions & { version?: number }): Promise<X402Purchase> {
     return this.x402Purchase("/paid/dataset", { slug, version: opts.version }, opts);
   }
@@ -1989,6 +2083,10 @@ function payOrigin(payUrl: string): string {
 function purchaseStatement(wallet: string, origin: string, time: number): string {
   return `WITAN purchase history\nwallet: ${wallet.toLowerCase()}\norigin: ${origin}\ntime: ${time}`;
 }
+function redeliverStatement(transaction: string, wallet: string, origin: string, time: number, version?: string): string {
+  return `WITAN redeliver\ntransaction: ${transaction.toLowerCase()}\nwallet: ${wallet.toLowerCase()}\norigin: ${origin}\ntime: ${time}` +
+    (version ? `\nversion: ${version}` : "");
+}
 function disputeStatement(transaction: string, wallet: string, origin: string, time: number): string {
   return `WITAN dispute\ntransaction: ${transaction.toLowerCase()}\nwallet: ${wallet.toLowerCase()}\norigin: ${origin}\ntime: ${time}`;
 }
@@ -2396,6 +2494,9 @@ async function x402Answer(res: Response): Promise<X402Purchase> {
   if (res.status >= 400) {
     let body: unknown = text.slice(0, 500);
     try { body = JSON.parse(text); } catch { /* not JSON */ }
+    // /paid/dataset: this wallet already has the version through an earlier purchase's update period (nothing charged)
+    const r = body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : undefined;
+    if (res.status === 409 && r && typeof r.transaction === "string" && r.redeliver) throw new AlreadyCovered(r);
     throw new WitanError(res.status, `purchase failed: ${brief(text) ?? `${res.status} ${res.statusText}`.trim()}`, body);
   }
   let body: unknown;

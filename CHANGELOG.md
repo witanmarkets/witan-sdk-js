@@ -14,6 +14,21 @@ The package is `0.x`: a minor release may change behaviour, and when it does the
 least two minor releases — see
 [Versions and deprecations](https://witanmarkets.github.io/witan-sdk-js/stable/deprecations/).
 
+## Unreleased
+
+### Added
+- `redeliver(transaction, { address, sign, version })`: what a settled x402 purchase delivered, sent again to the
+  wallet that paid at no charge (the pay service's `POST /redeliver`, on a service that pays sales to splits).
+  `address` and `sign` are as for `purchases()`: the SDK builds WITAN's redelivery statement, checks it against the
+  one the service issued, and your `sign` (personal_sign) signs it; the SDK takes no key. A unit comes back with its
+  body; a dataset as the version manifest with fresh part URLs, `version`, `boughtVersion` and `updatesUntil`.
+- The update period of a dataset purchase: `version` (a number or `"latest"`) asks for a version published until
+  the purchase's `updatesUntil`. One outside it throws `NotCovered` (403) with the service's reason and `buy`, the
+  route that sells it. `Purchase.updatesUntil` in `purchases()`.
+- `AlreadyCovered` (409): `buyDataset` of a version the wallet already has through an earlier purchase's update
+  period. Nothing was charged; `transaction` and `version` are what to pass to `redeliver`. Before, this answer was
+  a plain `WitanError`.
+
 ## 0.20.0 — 2026-11-13
 
 ### Added

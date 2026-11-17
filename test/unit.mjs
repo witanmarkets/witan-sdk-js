@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  ACK_KEY, ACK_TYPES, LICENSES, PaymentRequiredError, SignatureError, TermsAckError, Witan, WitanError, ackDomain, ackItem, ackStatement, defaultPayUrl, deprecationNotice,
+  ACK_KEY, ACK_TYPES, AlreadyCovered, LICENSES, NotCovered, PaymentRequiredError, SignatureError, TermsAckError, Witan, WitanError, ackDomain, ackItem, ackStatement, defaultPayUrl, deprecationNotice,
   endorsementStatement, signedStatement, updatePinnedKeys, verifyManifest, witanTermsAck,
 } from "../dist/index.js";
 
@@ -647,6 +647,88 @@ test("purchases: the wallet signs nothing but WITAN's statement, and only a fres
     await assert.rejects(w.purchases({ address: wallet, sign: async (t) => { signed.push(t); return "0x00"; } }), why);
     assert.deepEqual(signed, []);
     assert.equal(m.calls.length, 1);
+  }
+});
+
+// ---- redelivery -----------------------------------------------------------------------------
+const RTX = "0x" + "ab".repeat(32);
+const RWALLET = "0x" + "12".repeat(20);
+// pay/src/redeliver.ts redeliverStatement, written out again here so a drift in the SDK's copy fails a test
+const redeliverText = ({ t = NOW, version, tx = RTX } = {}) =>
+  `WITAN redeliver\ntransaction: ${tx}\nwallet: ${RWALLET}\norigin: http://pay.test\ntime: ${t}` + (version ? `\nversion: ${version}` : "");
+function redeliverService(answer, issued = (v) => redeliverText({ version: v })) {
+  return mock([
+    ["GET /redeliver/statement", (c) => {
+      const v = c.url.searchParams.get("version") ?? undefined;
+      return json(200, { statement: issued(v), wallet: RWALLET, time: NOW, expiresIn: 300, ...(v ? { version: v } : {}) });
+    }],
+    ["POST /redeliver", () => json(answer[0], answer[1])],
+  ]);
+}
+const payClient = (m) => new Witan({ baseUrl: BASE, apiKey: "km_test", payUrl: "http://pay.test", fetch: m.fetch });
+
+test("redeliver: the paying wallet signs WITAN's statement, and only the signature is posted", async () => {
+  const m = redeliverService([200, { id: "u-1", title: "t", body: "the full unit", paid: true, redelivered: true, transaction: RTX, split: null }]);
+  const signed = [];
+  const r = await payClient(m).redeliver(RTX.toUpperCase().replace("0X", "0x"), {
+    address: RWALLET.toUpperCase().replace("0X", "0x"), sign: async (text) => { signed.push(text); return "0x" + "ef".repeat(65); } });
+  assert.equal(r.body, "the full unit");
+  assert.equal(r.redelivered, true);
+  assert.deepEqual(signed, [redeliverText()]);
+  const [asked, posted] = m.calls;
+  assert.equal(asked.url.host, "pay.test");
+  assert.deepEqual(Object.fromEntries(asked.url.searchParams), { transaction: RTX, wallet: RWALLET });
+  assert.equal(posted.method, "POST");
+  assert.deepEqual(JSON.parse(posted.body), { transaction: RTX, wallet: RWALLET, time: NOW, signature: "0x" + "ef".repeat(65) });
+  for (const c of m.calls) assert.equal(c.headers.authorization, undefined, "no API key goes to the pay service");
+});
+
+test("redeliver: version goes to both calls and into what the wallet signs", async () => {
+  for (const [asked, named] of [["latest", "latest"], [112, "112"]]) {
+    const m = redeliverService([200, { project: "obs", version: 112, boughtVersion: 110, updatesUntil: "2026-12-14T00:00:00.000Z", parts: [], redelivered: true, transaction: RTX }]);
+    const signed = [];
+    const r = await payClient(m).redeliver(RTX, { address: RWALLET, version: asked, sign: async (t) => { signed.push(t); return "0x00"; } });
+    assert.equal(r.version, 112);
+    assert.equal(r.boughtVersion, 110);
+    assert.equal(m.calls[0].url.searchParams.get("version"), named);
+    assert.equal(JSON.parse(m.calls[1].body).version, named);
+    assert.deepEqual(signed, [redeliverText({ version: named })]);
+  }
+});
+
+test("redeliver: a statement for another version or purchase is not signed; bad input is refused before any request", async () => {
+  for (const issued of [() => redeliverText(), () => redeliverText({ version: "999" }), (v) => redeliverText({ version: v, tx: "0x" + "cd".repeat(32) })]) {
+    const m = redeliverService([200, {}], issued);
+    await assert.rejects(payClient(m).redeliver(RTX, { address: RWALLET, version: "latest", sign: async () => { throw new Error("must not sign"); } }), /something other/);
+    assert.equal(m.calls.filter((c) => c.method === "POST").length, 0);
+  }
+  const m = redeliverService([200, {}]);
+  const sign = async () => { throw new Error("must not sign"); };
+  await assert.rejects(payClient(m).redeliver("0x1234", { address: RWALLET, sign }), /settlement tx hash/);
+  await assert.rejects(payClient(m).redeliver(RTX, { address: RWALLET, sign, version: 0 }), /positive integer or "latest"/);
+  await assert.rejects(payClient(m).redeliver(RTX, { address: RWALLET, sign, version: "newest" }), /positive integer or "latest"/);
+  assert.equal(m.calls.length, 0);
+});
+
+test("redeliver: a version outside the update period throws NotCovered with the service's message and buy", async () => {
+  const refused = { error: "v120 was published after this purchase's update period ended on 2026-12-14T00:00:00.000Z — nothing was charged",
+    version: 120, boughtVersion: 110, updatesUntil: "2026-12-14T00:00:00.000Z", buy: "/paid/dataset?slug=obs&version=120" };
+  const m = redeliverService([403, refused]);
+  await assert.rejects(payClient(m).redeliver(RTX, { address: RWALLET, version: 120, sign: async () => "0x00" }), (e) =>
+    e instanceof NotCovered && e instanceof WitanError && e.status === 403 && e.message === refused.error &&
+    e.buy === refused.buy && e.version === 120 && e.boughtVersion === 110 && e.updatesUntil === refused.updatesUntil);
+});
+
+test("redeliver: 401, 404 and 429 throw WitanError with the service's message", async () => {
+  for (const [status, error] of [
+    [401, "the signed statement has expired — ask for a new one"],
+    [404, "no settled purchase by this wallet with that transaction"],
+    [404, "split payments are not switched on: every sale is paid to the platform wallet"],
+    [429, "too many redeliveries from this address — try again later"],
+  ]) {
+    const m = redeliverService([status, { error }]);
+    await assert.rejects(payClient(m).redeliver(RTX, { address: RWALLET, sign: async () => "0x00" }), (e) =>
+      e instanceof WitanError && !(e instanceof NotCovered) && e.status === status && e.message === error);
   }
 });
 

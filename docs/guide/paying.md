@@ -12,6 +12,7 @@ WITAN charges for paid dataset versions and for storage or egress past the free 
 | Price what you sell | `submit({ ..., price, trialSale })`, `setPrice(id, { price, trialSale })`, `projects.update(slug, { price, trialSale })` | the MCP tool `set_knowledge_price`, or `wtn price` in the Python SDK; the operator console only shows prices |
 | Top up prepaid credits | `buyCredits({ signer })`, over x402 from a wallet; `credits()` gives the `topup` URL. Credit packs are not sold on mainnet | any x402 client at that URL |
 | List what a wallet bought | `purchases({ address, sign })` | |
+| Have a purchase delivered again, or a later version within a dataset's update period | `redeliver(transaction, { address, sign, version })` | |
 | Dispute a payment | `dispute({ transaction, reason, address, sign })`, then `disputeStatus(id)` | |
 
 !!! note "The SDK never holds a wallet key"
@@ -243,5 +244,37 @@ do {
 | `status` | `"pending"`, `"settled"` or `"failed"` |
 | `createdAt`, `settledAt` | When the purchase was made and settled |
 | `dispute`, `disputeUntil` | The dispute (`id`, `status`) if one was opened, and the time until which one can still be opened |
+| `updatesUntil` | A dataset purchase: the end of its [update period](#redelivery-and-the-update-period), `null` without one |
 
-A signature the pay service does not accept throws `WitanError` with status 401. Every call and type is in the [API reference](../reference/index.md).
+A signature the pay service does not accept throws `WitanError` with status 401.
+
+## Redelivery and the update period
+
+A purchase is delivered in the answer its payment settles with. When that answer is lost (the connection drops, the process stops before the parts are saved), the wallet that paid asks for it again with `redeliver(transaction, { address, sign, version })`, at no charge and with no API key. `transaction` is the settlement hash from `x402.transaction` or `purchases()`. `address` and `sign` are the same as for `purchases()`: the SDK checks the pay service's statement against the one it builds, your `sign` callback signs it with personal_sign, and only the signature is sent.
+
+A unit comes back with its body. A dataset comes back as the version manifest with fresh part URLs valid for 15 minutes, with `version`, `boughtVersion` and `updatesUntil`.
+
+A seller can sell a dataset with an update period: the purchase then also covers every version published until `updatesUntil` (in the answer of `buyDataset`, and in each dataset entry of `purchases()`). Ask for one with `version: N` or `version: "latest"`. A version outside the period (an earlier one, or one published after it ended) throws `NotCovered` (status 403) with the pay service's reason as `message` and `buy`, the pay route that sells that version. `buyDataset` of a version the wallet already has through an update period throws `AlreadyCovered` (status 409) with the `transaction` and `version` to pass to `redeliver`. Nothing is charged in either case.
+
+```ts
+import { AlreadyCovered, Witan } from "witan-sdk";
+
+// with the viem account from above
+const sign = (s: string) => account.signMessage({ message: s });
+let m;
+try {
+  m = await w.buyDataset("api-latency-benchmarks", { signer: account });
+} catch (e) {
+  if (!(e instanceof AlreadyCovered)) throw e;
+  m = await w.redeliver(e.transaction, { address: account.address, sign, version: e.version });   // nothing charged
+}
+```
+
+| Status | Throws |
+|---|---|
+| 403, the version is not part of the purchase | `NotCovered` (`buy`, `version`, `boughtVersion`, `updatesUntil`) |
+| 404, no settled purchase by this wallet with that transaction, or a service that does not pay sales to splits | `WitanError` |
+| 401, the signature was refused or the statement expired | `WitanError` |
+| 429, too many redeliveries from this address | `WitanError` |
+
+Every call and type is in the [API reference](../reference/index.md).

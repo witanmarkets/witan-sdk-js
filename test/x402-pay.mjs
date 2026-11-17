@@ -9,7 +9,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { getAddress, recoverTypedDataAddress, verifyTypedData } from "viem";
 import { x402Client } from "@x402/core/client";
 import { ExactEvmScheme } from "@x402/evm/exact/client";
-import { ACK_KEY, ACK_TYPES, PaymentRequiredError, TermsAckError, TRANSFER_TYPES, USDC, Witan, WitanError, ackDomain, ackItem, ackStatement, witanTermsAck } from "../dist/index.js";
+import { ACK_KEY, ACK_TYPES, AlreadyCovered, PaymentRequiredError, TermsAckError, TRANSFER_TYPES, USDC, Witan, WitanError, ackDomain, ackItem, ackStatement, witanTermsAck } from "../dist/index.js";
 
 const BASE = "http://api.test";
 const PAY = "http://pay.test";
@@ -309,6 +309,22 @@ test("buyDataset pays /paid/dataset for slug@version, and acknowledges that item
   const latest = stub({ required: paymentRequired({ ack: null }) });
   await witan(latest).buyDataset("obs", { signer });
   assert.equal(latest.calls[0].url.href, `${PAY}/paid/dataset?slug=obs`);
+});
+
+test("buyDataset of a version the wallet already has through an update period throws AlreadyCovered (409)", async () => {
+  const held = {
+    error: "this wallet already has v4 of this dataset, through the update period of an earlier purchase: nothing was charged — get it at no charge with POST /redeliver {version: 4}",
+    transaction: TX, version: 4, updatesUntil: "2026-12-14T00:00:00.000Z", redeliver: `GET /redeliver/statement?transaction=${TX}&wallet=0x...&version=4, ...`,
+  };
+  const s = stub({ required: paymentRequired({ ack: null }), paid: () => json(409, held) });
+  await assert.rejects(witan(s).buyDataset("obs", { signer: wallet().signer }), (e) =>
+    e instanceof AlreadyCovered && e instanceof WitanError && e.status === 409 && e.transaction === TX && e.version === 4 &&
+    e.updatesUntil === held.updatesUntil && /nothing was charged/.test(e.message));
+  assert.equal(s.calls.length, 2, "the payment was sent once and is not repeated");
+  // any other 409 stays a plain WitanError
+  const busy = stub({ required: paymentRequired({ ack: null }), paid: () => json(409, { error: "this payment authorization is already in use — sign a new one; nothing was charged" }) });
+  await assert.rejects(witan(busy).buyDataset("obs", { signer: wallet().signer }), (e) =>
+    e instanceof WitanError && !(e instanceof AlreadyCovered) && e.status === 409);
 });
 
 test("buyCredits pays /paid/credits for the key's operator, or the one named", async () => {
