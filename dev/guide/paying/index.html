@@ -563,6 +563,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#redelivery-and-the-update-period" class="md-nav__link">
+    <span class="md-ellipsis">
+      Redelivery and the update period
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -833,6 +842,15 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#redelivery-and-the-update-period" class="md-nav__link">
+    <span class="md-ellipsis">
+      Redelivery and the update period
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -889,6 +907,11 @@
 <tr>
 <td>List what a wallet bought</td>
 <td><code>purchases({ address, sign })</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Have a purchase delivered again, or a later version within a dataset's update period</td>
+<td><code>redeliver(transaction, { address, sign, version })</code></td>
 <td></td>
 </tr>
 <tr>
@@ -1165,9 +1188,56 @@
 <td><code>dispute</code>, <code>disputeUntil</code></td>
 <td>The dispute (<code>id</code>, <code>status</code>) if one was opened, and the time until which one can still be opened</td>
 </tr>
+<tr>
+<td><code>updatesUntil</code></td>
+<td>A dataset purchase: the end of its <a href="#redelivery-and-the-update-period">update period</a>, <code>null</code> without one</td>
+</tr>
 </tbody>
 </table>
-<p>A signature the pay service does not accept throws <code>WitanError</code> with status 401. Every call and type is in the <a href="../../reference/">API reference</a>.</p>
+<p>A signature the pay service does not accept throws <code>WitanError</code> with status 401.</p>
+<h2 id="redelivery-and-the-update-period">Redelivery and the update period<a class="headerlink" href="#redelivery-and-the-update-period" title="Permanent link">&para;</a></h2>
+<p>A purchase is delivered in the answer its payment settles with. When that answer is lost (the connection drops, the process stops before the parts are saved), the wallet that paid asks for it again with <code>redeliver(transaction, { address, sign, version })</code>, at no charge and with no API key. <code>transaction</code> is the settlement hash from <code>x402.transaction</code> or <code>purchases()</code>. <code>address</code> and <code>sign</code> are the same as for <code>purchases()</code>: the SDK checks the pay service's statement against the one it builds, your <code>sign</code> callback signs it with personal_sign, and only the signature is sent.</p>
+<p>A unit comes back with its body. A dataset comes back as the version manifest with fresh part URLs valid for 15 minutes, with <code>version</code>, <code>boughtVersion</code> and <code>updatesUntil</code>.</p>
+<p>A seller can sell a dataset with an update period: the purchase then also covers every version published until <code>updatesUntil</code> (in the answer of <code>buyDataset</code>, and in each dataset entry of <code>purchases()</code>). Ask for one with <code>version: N</code> or <code>version: "latest"</code>. A version outside the period (an earlier one, or one published after it ended) throws <code>NotCovered</code> (status 403) with the pay service's reason as <code>message</code> and <code>buy</code>, the pay route that sells that version. <code>buyDataset</code> of a version the wallet already has through an update period throws <code>AlreadyCovered</code> (status 409) with the <code>transaction</code> and <code>version</code> to pass to <code>redeliver</code>. Nothing is charged in either case.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">AlreadyCovered</span><span class="p">,</span><span class="w"> </span><span class="nx">Witan</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"witan-sdk"</span><span class="p">;</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="c1">// with the viem account from above</span>
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="kd">const</span><span class="w"> </span><span class="nx">sign</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">s</span><span class="o">:</span><span class="w"> </span><span class="kt">string</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">account</span><span class="p">.</span><span class="nx">signMessage</span><span class="p">({</span><span class="w"> </span><span class="nx">message</span><span class="o">:</span><span class="w"> </span><span class="kt">s</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="kd">let</span><span class="w"> </span><span class="nx">m</span><span class="p">;</span>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="k">try</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">  </span><span class="nx">m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">w</span><span class="p">.</span><span class="nx">buyDataset</span><span class="p">(</span><span class="s2">"api-latency-benchmarks"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">signer</span><span class="o">:</span><span class="w"> </span><span class="kt">account</span><span class="w"> </span><span class="p">});</span>
+<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="p">}</span><span class="w"> </span><span class="k">catch</span><span class="w"> </span><span class="p">(</span><span class="nx">e</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="nx">e</span><span class="w"> </span><span class="ow">instanceof</span><span class="w"> </span><span class="nx">AlreadyCovered</span><span class="p">))</span><span class="w"> </span><span class="k">throw</span><span class="w"> </span><span class="nx">e</span><span class="p">;</span>
+<a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="w">  </span><span class="nx">m</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">w</span><span class="p">.</span><span class="nx">redeliver</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">transaction</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">address</span><span class="o">:</span><span class="w"> </span><span class="kt">account.address</span><span class="p">,</span><span class="w"> </span><span class="nx">sign</span><span class="p">,</span><span class="w"> </span><span class="nx">version</span><span class="o">:</span><span class="w"> </span><span class="kt">e.version</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// nothing charged</span>
+<a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a><span class="p">}</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Throws</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>403, the version is not part of the purchase</td>
+<td><code>NotCovered</code> (<code>buy</code>, <code>version</code>, <code>boughtVersion</code>, <code>updatesUntil</code>)</td>
+</tr>
+<tr>
+<td>404, no settled purchase by this wallet with that transaction, or a service that does not pay sales to splits</td>
+<td><code>WitanError</code></td>
+</tr>
+<tr>
+<td>401, the signature was refused or the statement expired</td>
+<td><code>WitanError</code></td>
+</tr>
+<tr>
+<td>429, too many redeliveries from this address</td>
+<td><code>WitanError</code></td>
+</tr>
+</tbody>
+</table>
+<p>Every call and type is in the <a href="../../reference/">API reference</a>.</p>
 
 
 
